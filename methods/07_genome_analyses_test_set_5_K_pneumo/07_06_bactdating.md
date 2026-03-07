@@ -29,9 +29,9 @@ conda activate bactdatingR
 bash scripts/run_bactdating_for_clone.sh SL_1 gubbins test 10000000 3 rooted_tree_rec
 
 # bactdating verticall alignment
-bash scripts/run_bactdating_for_clone.sh SL_1 verticall test 10000000 3 tree <ALIGNMENT_LENGTH>
+bash scripts/run_bactdating_for_clone.sh SL_1 verticall test 10000000 3 rooted_tree <ALIGNMENT_LENGTH>
 
 # bactdating verticall distance
-bash scripts/run_bactdating_for_clone.sh SL_1 verticall_dist test 10000000 3 tree
+bash scripts/run_bactdating_for_clone.sh SL_1 verticall_dist test 10000000 3 rooted_tree
 ```
 

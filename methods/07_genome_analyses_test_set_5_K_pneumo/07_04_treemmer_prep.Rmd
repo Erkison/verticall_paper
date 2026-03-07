@@ -15,7 +15,7 @@ library(tidyverse)
 # dirs
 project_dir <- here::here()
 project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
-fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+fnxs_dir <- file.path(project_dir, "methods/bin/")
 # read in data
 selected_clones_data <- read_tsv(
     file.path(project_dir, "data/dataset5_K_pneumo/selected_clones/selected_clones_data.tsv"),

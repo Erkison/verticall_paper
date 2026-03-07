@@ -21,7 +21,7 @@ library(fs)
 # Vars
 project_dir <- here::here()
 project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
-fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+fnxs_dir <- file.path(project_dir, "methods/bin/")
 
 source(file.path(fnxs_dir, "filtering_and_clone_selection_functions.R"))
 ```

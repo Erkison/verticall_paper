@@ -23,7 +23,7 @@ library(tidytree)
 # Vars and data
 project_dir <- here::here()
 project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
-fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+fnxs_dir <- file.path(project_dir, "methods/bin/")
 
 filtered_data <- readRDS(file.path(project_data_dir, "all_data_filtered.rds"))
 all_data <- readRDS(file.path(project_data_dir, "all_data.rds"))
