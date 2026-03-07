@@ -18,6 +18,7 @@ library(plotly)
 library(ggpubr)
 library(ape)
 library(patchwork)
+library(lme4)
 
 ```
 
@@ -198,11 +199,7 @@ kp_bd_performance_long %>%
     geom_jitter(width=0.1) + facet_wrap(~method) +
     labs(y = "Nucleotide divergence")
 
-library(lme4)
-
-kp_bd_performance_long %<>% mutate(method = factor(method, levels=c("GB", "VA", "VD")))
-
-kp_bd_model <- glmer(Converged ~ N_isolates_z + nuc_divergence_z + method + (1 + nuc_divergence_z | Sublineage),
+kp_bd_model <- glmer(Converged ~ N_isolates_z + nuc_divergence_z + method + (1 | Sublineage),
                data = kp_bd_performance_long, family = binomial)
 summary(kp_bd_model)
 kp_bd_model_df <- summary(kp_bd_model)$coefficients[-1,] %>% 
@@ -212,23 +209,6 @@ kp_bd_model_df <- summary(kp_bd_model)$coefficients[-1,] %>%
            lower = round(exp(Estimate - (1.96 * StdErr)), 2),
            upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>% 
     select(Predictor, Estimate, StdErr, OR, lower, upper, P)
-
-
-
-kp_bd_model1 <- logistf::logistf("Converged ~ N_isolates_z + nuc_divergence_z + method", data=kp_bd_performance_long)
-summary(kp_bd_model1)
-kp_bd_model1_df <- cbind(kp_bd_model1$coefficients, diag(kp_bd_model1$var)^0.5, kp_bd_model1$prob)[-1,] %>%
-    as_tibble(rownames = "Predictor") %>%
-    rename(Estimate = V1, StdErr = V2, P = V3) %>%
-    mutate(OR = round(exp(Estimate), 2),
-           lower = round(exp(Estimate - (1.96 * StdErr)), 2),
-           upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>%
-    select(Predictor, Estimate, StdErr, OR, lower, upper, P)
-
-
-
-
-
 ```
 
 <br>
@@ -258,17 +238,6 @@ neg_root_dates <- kp_bd_results_long %>% filter(root_date < 0 | root_date_lower 
 converged_SLs_all_workflows <- kp_bd_results_raw %>% 
     filter(ESS_gubbins=="All >=200" & ESS_vr=="All >=200" & ESS_vd=="All >=200") %>% 
     pull(Sublineage)
-
-# kp_bd_results_long %>% 
-#     mutate(results = if_else(
-#         ESS == "All >=200", 
-#         sprintf("Mu: %.1f [%.1f-%.1f]; Root date: %.1f [%.1f-%.1f]", 
-#                 mu, mu_lower, mu_upper, root_date, root_date_lower, root_date_upper), 
-#         "-")) %>% 
-#     pivot_wider(id_cols = Sublineage, names_from = method, values_from = results) %>%
-#     write_tsv("~/Desktop/bd_results.tsv")
-
-
 
 # Converged runs
 kp_bd_results_converged <- kp_bd_results_long %>% 
@@ -301,16 +270,11 @@ comp_df_mu_wide <- kp_bd_results_converged %>% select(Sublineage, method, mu, mu
     pivot_longer(cols = -c(Sublineage, method)) %>% 
     pivot_wider(id_cols = c(Sublineage), names_from = c(method, name), values_from = value) %>% 
     rowwise() %>% 
-    mutate(all_overlap = if_else(max(GB_mu_lower,VD_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VD_mu_upper,VA_mu_upper),
-                       "Yes", "No")) %>% 
-    mutate(VD_GB_overlap = if_else(max(GB_mu_lower,VD_mu_lower) <= min(GB_mu_upper,VD_mu_upper),
-                       "Yes", "No")) %>% 
-    mutate(VA_GB_overlap = if_else(max(GB_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VA_mu_upper),
-                       "Yes", "No")) %>% 
-    mutate(VD_VA_overlap = if_else(max(VD_mu_lower,VA_mu_lower) <= min(VD_mu_upper,VA_mu_upper),
-                       "Yes", "No")) %>% 
+    mutate(all_overlap = if_else(max(GB_mu_lower,VD_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VD_mu_upper,VA_mu_upper), "Yes", "No")) %>% 
+    mutate(VD_GB_overlap = if_else(max(GB_mu_lower,VD_mu_lower) <= min(GB_mu_upper,VD_mu_upper), "Yes", "No")) %>% 
+    mutate(VA_GB_overlap = if_else(max(GB_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VA_mu_upper), "Yes", "No")) %>% 
+    mutate(VD_VA_overlap = if_else(max(VD_mu_lower,VA_mu_lower) <= min(VD_mu_upper,VA_mu_upper), "Yes", "No")) %>% 
     ungroup()
-
 overlaps_mu <- comp_df_mu_wide %>% count(all_overlap)
 
 # Root dates overlaps across all workflows and compared to Gubbins
@@ -319,14 +283,10 @@ comp_df_rd_wide <- kp_bd_results_converged %>%
     pivot_longer(cols = -c(Sublineage, method)) %>% 
     pivot_wider(id_cols = c(Sublineage), names_from = c(method, name), values_from = value) %>% 
     rowwise() %>% 
-    mutate(all_overlap = if_else(max(GB_rd_lower,VD_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VD_rd_upper,VA_rd_upper),
-                       "Yes", "No")) %>% 
-    mutate(VD_GB_overlap = if_else(max(GB_rd_lower,VD_rd_lower) <= min(GB_rd_upper,VD_rd_upper),
-                       "Yes", "No")) %>% 
-    mutate(VA_GB_overlap = if_else(max(GB_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VA_rd_upper),
-                       "Yes", "No")) %>% 
-    mutate(VD_VA_overlap = if_else(max(VD_rd_lower,VA_rd_lower) <= min(VD_rd_upper,VA_rd_upper),
-                       "Yes", "No")) %>% 
+    mutate(all_overlap = if_else(max(GB_rd_lower,VD_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VD_rd_upper,VA_rd_upper), "Yes", "No")) %>% 
+    mutate(VD_GB_overlap = if_else(max(GB_rd_lower,VD_rd_lower) <= min(GB_rd_upper,VD_rd_upper), "Yes", "No")) %>% 
+    mutate(VA_GB_overlap = if_else(max(GB_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VA_rd_upper), "Yes", "No")) %>% 
+    mutate(VD_VA_overlap = if_else(max(VD_rd_lower,VA_rd_lower) <= min(VD_rd_upper,VA_rd_upper), "Yes", "No")) %>% 
     ungroup()
 overlaps_rd <- comp_df_rd_wide %>% count(all_overlap)
 
@@ -391,16 +351,12 @@ MRCA_plot <- kp_bd_results_converged %>%
     custom_plots_theme2 +
     theme(plot.caption = element_text(hjust=0, face='italic', size=14),
           legend.position = "right",
-          axis.text.x = element_text(angle=45, hjust=1, vjust=1)) # +
-    # scale_x_continuous(trans = scales::pseudo_log_trans(base=10),
-    #                    breaks = seq(800,2000,200)) +
-    # labs(x = "Root date (log10 scale)")
+          axis.text.x = element_text(angle=45, hjust=1, vjust=1))
 
 
 # ggsave(file=file.path(comp_figs_dir, "root_date_plot.png"), 
 #        plot=MRCA_plot, width=8, height=12, bg = 'white')
 
-# MRCA_plot
 ```
 
 
@@ -414,7 +370,6 @@ comp_plots <- (
                    axis.text.y=element_blank(), axis.text.x=element_text(angle=45, hjust=1, vjust=1))
          ) +
         (dic_plot + labs(title = "(C) DIC") + theme_bw() + custom_plots_theme2 + guides(fill='none') +  
-             # scale_x_continuous(trans = scales::pseudo_log_trans(base=10)) + labs(x = "DIC (log10 scale)")
              theme(axis.text.y=element_blank(), axis.text.x = element_text(angle=45, hjust=1, vjust=1))
          ) 
     ) + 

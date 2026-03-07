@@ -426,8 +426,6 @@ ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.svg"),
        width=8, height=10, plot=SET_maps_with_unfiltered, bg="white")
 
 
-# plot_rec_map(tree = SET_tree_sgi, recomb_df = SET_sgi_rec %>% filter(Beg == 3053778))
-
 ###################################
 # Variance of root-to-tip distances
 ###################################
@@ -688,54 +686,6 @@ make_tanglegram(ECG_tree_sci, ECG_tree_vpf,
                 line_color = '#1F78B4', color_branches=F,
                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 2.5)
 dev.off()
-
-# # # color by clonal group, colour branches
-# make_tanglegram(ECG_tree_sci, ECG_tree_vpf,
-#                 title1=wf_names["sci"], title2=wf_names["vpf"],
-#                 color_by_var=T, color_df=ECG_df, id_column="id", color_column="CG",
-#                 named_var_colors = ECG_CG_colors, color_branches = T,
-#                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 2.5)
-
-
-
-
-# ECG_trees <- list(ECG_tree_si, ECG_tree_sci, ECG_tree_sgi, ECG_tree_svi, ECG_tree_ff, ECG_tree_vpf)
-# class(ECG_trees) <- "multiPhylo"
-# names(ECG_trees) <- wf_names[c('si', 'sci', 'sgi', 'svi', 'ff', 'vpf')]
-# ECG_rf <- treespace::treespace(ECG_trees, method = "RF", nf=3)
-# ECG_rf_pco <- as.data.frame(ECG_rf$pco$li) %>% as_tibble(rownames = "Method")
-# ECG_rf_eig <- round(ECG_rf$pco$eig / sum(ECG_rf$pco$eig) * 100, 1)
-# ECG_rf_mat <- as.matrix(ECG_rf$D)
-# # write_tsv(ECG_rf_mat %>% as_tibble(rownames = "Method"),
-# #           file.path(verticall_figs_dir, "../tables/E_coli_GEMS_RF.tsv"))
-# 
-# # What is the mean RF dist btw all alignment-based-workflow trees
-# idx_aln <- c(1:4) # index of alignment-based workflows
-# idx_dist <- c(5,6) # index of distance-based workflows
-# ECG_rf_aln_based <- ECG_rf_mat[idx_aln, idx_aln]
-# round(c(mean = mean(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)]),
-#   min = min(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)]),
-#   max = max(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)])),1)
-# 
-# # Plot RF PCo
-# ECG_rf_pco_plot <- ECG_rf_pco %>%
-#     mutate(Method = factor(Method, levels = names(ECG_trees))) %>%
-#     ggplot(aes(x = A1, y = A2, color = Method)) +
-#     geom_point(size = 4) +
-#     # stat_ellipse(type = "norm", alpha = 0.3) +
-#     theme_bw() +
-#     labs(x = glue::glue("PCo1 ({ECG_rf_eig[1]}%)"),
-#          y = glue::glue("PCo2 ({ECG_rf_eig[2]}%)")) +
-#     scale_color_manual(values = RColorBrewer::brewer.pal(n = 8, name = "Set1")[-c(6,7)]) +
-#     coord_equal()
-# ECG_rf_pco_plot
-# # ggsave(file.path(verticall_figs_dir, "E_coli_GEMS_RF_PCoA.png"),
-# #        width=7, height=4, plot=ECG_rf_pco_plot, bg = "white")
-# 
-# # identify clusters of similar trees
-# ECG_rf_groves <- treespace::findGroves(ECG_rf, nclust = 3)
-# treespace::plotGroves(ECG_rf_groves)
-
 ```
 
 
