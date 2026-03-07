@@ -1,0 +1,249 @@
+---
+title: "Merge clones"
+date: "24 July 2023"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=F, echo = F, warning = F, message = F, tidy = T, comment = "", dev = "svg")
+```
+
+```{r load packages}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(glue)
+library(ggthemes)
+library(treeio)
+library(ggtree)
+library(tidytree)
+```
+
+```{r data}
+# Vars and data
+project_dir <- here::here()
+project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
+fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+
+filtered_data <- readRDS(file.path(project_data_dir, "all_data_filtered.rds"))
+all_data <- readRDS(file.path(project_data_dir, "all_data.rds"))
+
+# Generated figures
+merge_SLs_figs_dir <- file.path(project_dir, "figures/merge_SLs/")
+fs::dir_create(merge_SLs_figs_dir)
+
+# functions
+source(file.path(fnxs_dir, "filtering_and_clone_selection_functions.R"))
+```
+
+
+```{r select_SL_reps_for_resolution_with_verticall}
+# select one representative sample (with the highest N50) for each Clonal group in each Sublineage
+# To run distance tree with Verticall on this set to determine which Sublineages should be grouped  together
+clone_var <- "Sublineage"
+
+# select all clones with at least 20 isolates
+x <- select_and_filter_clones(filtered_data, clone_var = clone_var, min_n_isolates = 20,
+                              min_k_loci_per_clone = 1, min_year_span = 1)[["selected_clones_summary_data"]]
+# get the data for the selected clones
+y <- filtered_data %>%
+    dplyr::filter( !!sym(clone_var) %in% x[[clone_var]] ) %>%
+    dplyr::mutate( !!sym(clone_var) := as.character(!!sym(clone_var)) )
+# get representatives of each clone
+selected_SL_and_CG_representatives <- y %>%
+    dplyr::group_by(Sublineage, `Clonal Group`) %>%
+    dplyr::filter(N50 == max(N50)) %>%
+    ungroup() %>% dplyr::select(id, Sublineage, `Clonal Group`, ST)
+
+selected_SL_and_CG_representatives %>%
+    dplyr::arrange(desc(Sublineage)) %>% dplyr::group_by(Sublineage) %>%
+    dplyr::summarise(CGs = paste(sort(`Clonal Group`), collapse = "; "))
+
+# write.table(selected_SL_and_CG_representatives_with_filepaths,
+#             file = file.path(project_data_dir,
+#                              "for_verticall/selected_SL_and_CG_representatives.csv"),
+#             sep = ",", na = "", row.names = F)
+# readr::write_lines(selected_SL_and_CG_representatives_with_filepaths %>% 
+#                        dplyr::pull(assembly_path),
+#             file=file.path(project_data_dir, "for_verticall/selected_sample_paths.txt"))
+
+```
+
+I ran the verticall distance workflow on the selected CG representatives and processed the phylip distance file below
+
+
+```{r explore_SLs_to_merge_based_on_verticall_distances}
+
+# Read the Phylip distance matrix file
+dist <- read.table(file.path(project_data_dir, "verticall_merge_SLs/verticall.phylip"),
+                   skip = 1, header = FALSE) %>% 
+    dplyr::mutate(V1 = sub("_fixed", "", V1))
+distance_samples <- dist$V1
+dist_matrix <- dist %>% dplyr::select(-V1) %>% as.matrix()
+dimnames(dist_matrix) <- list(distance_samples, distance_samples)
+
+distances <- as.data.frame(as.table(dist_matrix))
+names(distances) <- c("Sample1", "Sample2", "Distance")
+
+
+# Distances between all genome pairs
+distances %<>% 
+    # remove duplicate pairs. i.e row1 = samp1 vs samp2 and row2 = samp2. vs samp1, keep only one row
+    dplyr::filter( ! Sample1 == Sample2 ) %>% 
+    dplyr::mutate(Sample1 = as.character(Sample1), Sample2 = as.character(Sample2)) %>% 
+    dplyr::mutate(L1 = if_else(Sample1 < Sample2, Sample1, Sample2)) %>% 
+    dplyr::mutate(L2 = if_else(Sample1 > Sample2, Sample1, Sample2)) %>% 
+    dplyr::mutate(pairs = paste0(L1, "_", L2)) %>% dplyr::select(-c(L1, L2)) %>% 
+    dplyr::distinct(pairs, .keep_all = TRUE) %>% 
+    # add sublineage designation for each sample and check if each pair belongs to the same SL
+    dplyr::left_join(all_data %>% dplyr::select(id, Sublineage),
+                        by = c("Sample1" = "id")) %>% 
+    dplyr::rename("S1_Sublineage" = "Sublineage") %>% 
+    dplyr::left_join(all_data %>% dplyr::select(id, Sublineage),
+                        by = c("Sample2" = "id")) %>% 
+    dplyr::rename("S2_Sublineage" = "Sublineage") %>%
+    dplyr::mutate(sublineage_of_pair = if_else(
+        S1_Sublineage == S2_Sublineage, "Same sublineage", "Different sublineage"
+    )) %>% 
+    dplyr::mutate(sublineage_of_pair = factor(sublineage_of_pair, levels = c("Same sublineage", "Different sublineage"))) %>% 
+    dplyr::filter(!is.na(sublineage_of_pair))
+
+# Summary
+distances_summary <- distances %>% group_by(sublineage_of_pair) %>% 
+    reframe(range = paste(format(range(Distance), scientific=F), collapse = "-"), 
+            mean=mean(Distance), median=median(Distance))
+distances_summary
+
+# Mean and median distance between genomes within distinct sublineage pairs
+avg_dist_per_SL_pair <- distances %>% 
+    dplyr::mutate(L1 = if_else(S1_Sublineage < S2_Sublineage, S1_Sublineage, S2_Sublineage)) %>% 
+    dplyr::mutate(L2 = if_else(S1_Sublineage > S2_Sublineage, S1_Sublineage, S2_Sublineage)) %>% 
+    dplyr::mutate(SL_pair = paste0(L1, "_", L2)) %>% dplyr::select(-c(L1, L2)) %>% 
+    dplyr::group_by(SL_pair) %>% 
+    dplyr::summarise(median_distance = median(Distance),
+                     mean_distance = mean(Distance)) %>% 
+    separate(SL_pair, into = paste0("SL", 1:2), sep = "_") %>% 
+    dplyr::mutate(sublineage_of_pair = if_else(
+        SL1 == SL2, "Same sublineage", "Different sublineage")
+    ) %>% 
+    dplyr::arrange(mean_distance)
+
+# set distance cut off for SLs considered as belonging to the same SL
+dist_cut_off <- 0.004
+
+
+# Plot distance distribution
+plot_dist_hist <- function(distances, x_label="Distance", y_label="Count",
+                           plot_title=NULL, legend_title=NULL){
+    ggplot(distances, aes(x = Distance, fill = sublineage_of_pair)) +
+    geom_histogram(binwidth = 0.0001, color = "black", alpha = 0.8) +
+    labs(title = plot_title, x = x_label, y = y_label, fill = legend_title) +
+    scale_fill_manual(values = c("Different sublineage" = "maroon", "Same sublineage" = "lightblue")) +
+    theme_bw() +
+    theme(axis.text = element_text(size = 14), axis.title = element_text(size = 14),
+          legend.text = element_text(size=14), legend.title = element_text(size=14),
+          plot.title = element_text(size=14))
+}
+
+# plot distribution of mean distances between distinct sublineage pairs
+mean_dist_hist_plot <- plot_dist_hist(avg_dist_per_SL_pair %>% rename("Distance" = "mean_distance"), 
+                                      x_label = "Mean distance",
+                                      y_label="Number of sublineage pairs (log2 scale)",
+                                      plot_title = "Mean vertical distances within and between sublineages") +
+    theme(legend.position = "bottom") +
+    geom_vline(aes(xintercept = dist_cut_off), colour="black", linetype="dashed") +
+    scale_y_continuous(trans="log2")
+mean_dist_hist_plot
+# Zoom into region with dist < 0.004
+mean_dist_hist_plot_ld0.004 <- plot_dist_hist(avg_dist_per_SL_pair %>% rename("Distance"="mean_distance") %>% 
+                                                  filter(Distance<0.004), 
+                                      x_label=NULL, y_label=NULL) + 
+    guides(fill = "none") +
+    theme(axis.text=element_text(size=12))
+mean_dist_hist_plot_ld0.004
+
+mean_dist_hist_plots_combined <- mean_dist_hist_plot + 
+    patchwork::inset_element(mean_dist_hist_plot_ld0.004, 0.15, 0.5, 0.55, 0.98, ignore_tag=T)
+
+# plot distribution of distances between all genome pairs
+dist_hist_plot <- plot_dist_hist(distances, y_label = "Number of genome pairs (log10 scale)",
+                                 plot_title="Vertical distances between genome pairs") +
+    theme(legend.position = "bottom") +
+    geom_vline(aes(xintercept = dist_cut_off), colour="black", linetype="dashed")
+dist_hist_plot
+
+# scale y axis and facet
+dist_hist_plot_faceted_scaled_y_axis <- dist_hist_plot + 
+    facet_wrap(~sublineage_of_pair, nrow=1) + # facet_wrap(~sublineage_of_pair, nrow=2, scales="free_y") +
+    scale_y_continuous(trans = scales::pseudo_log_trans(base=10), 
+                       breaks = c(0, 10, 100, 1000, 10000, 100000),
+                       labels = scales::comma_format()) +
+    theme(strip.text = element_text(size = 14), legend.title = element_text(size = 14),
+          legend.position = "bottom") +
+    geom_vline(aes(xintercept = dist_cut_off), colour="black", linetype="dashed") +
+    guides(fill = "none")
+dist_hist_plot_faceted_scaled_y_axis
+
+# combine plots for manuscript fig
+combined_dist_plots <- (mean_dist_hist_plot + dist_hist_plot_faceted_scaled_y_axis) +
+    patchwork::plot_layout(ncol=1) +
+    patchwork::plot_annotation(tag_levels="A", tag_prefix="(", tag_suffix=")") &
+    theme(legend.position = "bottom")
+
+combined_dist_plots2 <- (mean_dist_hist_plots_combined + dist_hist_plot_faceted_scaled_y_axis) +
+    patchwork::plot_layout(ncol=1, heights=c(0.6,0.4)) +
+    patchwork::plot_annotation(tag_levels="A", tag_prefix="(", tag_suffix=")") &
+    theme(legend.position = "bottom")
+
+# Save plots
+ggsave(file=file.path(merge_SLs_figs_dir, today(), "mean_distances_between_SL_pairs.png"), 
+       plot=mean_dist_hist_plot, width=10, height=6, bg="white")
+ggsave(file=file.path(merge_SLs_figs_dir, today(), "mean_distances_between_SL_pairs_with_inset.png"), 
+       plot=mean_dist_hist_plots_combined, width=10, height=6, bg="white")
+ggsave(file=file.path(merge_SLs_figs_dir, today(), "distances_between_genome_pairs.png"), 
+       plot=dist_hist_plot_faceted_scaled_y_axis, width=12, height=7, bg="white")
+ggsave(file=file.path(merge_SLs_figs_dir, today(), "combined_dist_plots.png"), 
+       plot=combined_dist_plots, width=10, height=11, bg="white")
+ggsave(file=file.path(merge_SLs_figs_dir, today(), "combined_dist_plots2.png"), 
+       plot=combined_dist_plots2, width=10, height=12, bg="white")
+
+```
+
+```{r SLs_to_merge_based_on_mean_dist_btw_SLs}
+SLs_to_merge_table <- avg_dist_per_SL_pair %>% 
+    filter(!(SL1 == SL2)) %>% 
+    filter(mean_distance <= dist_cut_off)
+write.table(
+    SLs_to_merge_table,
+    file.path(project_data_dir, "verticall_merge_SLs/SLs_to_merge.csv"),
+    sep = ",", na = "", row.names = F)
+```
+
+
+```{r merge_SLs}
+SLs_to_merge <- SLs_to_merge_table %>% 
+    group_by(SL1) %>% reframe(SL2 = paste0(SL2, collapse = " ")) %>% ungroup() %>% 
+    group_by(SL2) %>% reframe(SL1 = paste0(SL1, collapse = " ")) %>% 
+    # Split both cols by space char and pull into a list
+    mutate(values = map2(SL1, SL2, function(x, y) c(strsplit(as.character(x), " ")[[1]],
+                                                    strsplit(as.character(y), " ")[[1]]))) %>% 
+    dplyr::pull(values)
+
+# Save all original clone designations in a new column before merging
+ori_clone_var <- paste0("ori_", clone_var)
+filtered_data_with_merged_SLs <- filtered_data %>% 
+        dplyr::mutate(!!sym(ori_clone_var) := !!sym(clone_var))
+
+for (combination in SLs_to_merge) {
+      filtered_data_with_merged_SLs <- 
+          combine_clones(filtered_data_with_merged_SLs, clone_var = "Sublineage", combination)
+    }
+# Save updated filtered data
+saveRDS(filtered_data_with_merged_SLs,
+        file = file.path(project_data_dir, "all_data_filtered_with_merged_SLs.rds"))
+```
+
+
+
+
+

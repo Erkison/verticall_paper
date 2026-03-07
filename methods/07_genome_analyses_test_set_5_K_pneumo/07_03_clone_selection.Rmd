@@ -1,0 +1,140 @@
+---
+title: "Seroepi clone selection"
+output: 
+    prettydoc::html_pretty:
+        theme: cayman
+        fig_width: 15
+        fig_height: 15
+editor_options:
+    chunk_output_type: console
+date: "`r Sys.Date()`"
+---
+
+<style>
+    .main-content, .toc {
+      max-width: 90rem;
+      padding: 2rem 4rem;
+      margin: 0 auto;
+      font-size: 1.5rem;
+    }
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=F, echo = F, warning = F, message = F, tidy = T, comment = "", dev = "svg")
+```
+
+```{r load packages and custom functions}
+library(tidyverse)
+library(ggplot2)
+library(glue)
+library(ggthemes)
+```
+
+```{r data}
+# dirs
+project_dir <- here::here()
+project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
+fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+
+filtered_data <- readRDS(file.path(project_data_dir, "all_data_filtered.rds"))
+filtered_data_with_merged_SLs <- readRDS(file.path(project_data_dir, "all_data_filtered_with_merged_SLs.rds"))
+filtered_data_assembly_and_read_paths <-
+    readr::read_csv(file.path(project_data_dir,"filtered_data_assembly_and_read_paths.csv"),
+             show_col_types = F)
+
+
+source(file.path(fnxs_dir, "filtering_and_clone_selection_functions.R"))
+```
+
+
+```{r select clones data}
+clone_var <- "Sublineage" 
+
+
+# select and filter clones
+filtered_clones_data_lst <-
+    select_and_filter_clones(filtered_data_with_merged_SLs,
+                             clone_var = clone_var, min_n_isolates = 20,
+                             min_k_loci_per_clone = 1, min_year_span = 10)
+
+selected_clones_summary_data <- filtered_clones_data_lst$selected_clones_summary_data
+selected_clones_summary_data_full <- filtered_clones_data_lst$selected_clones_summary_data_full
+selected_clones_data <- filtered_clones_data_lst$selected_clones_data
+
+# Add assembly id to selected clones data
+selected_clones_data %<>% 
+    dplyr::left_join(filtered_data_assembly_and_read_paths %>% 
+                         dplyr::select(id, assembly_path, read_path, assembly_id),
+                     by = "id") %>% 
+    dplyr::mutate(sequence_id = str_replace(basename(read_path), "_[1,2].fastq.gz", "")) %>% 
+    dplyr::select(c(id, sequence_id, assembly_id, dplyr::everything()))
+
+readr::write_tsv(selected_clones_summary_data,
+                 file.path(project_data_dir, "selected_clones/selected_clones_summary_data.tsv"),
+                 na = "")
+readr::write_tsv(selected_clones_summary_data_full,
+            file.path(project_data_dir, "selected_clones/selected_clones_summary_data_full.tsv"),
+            na = "")
+readr::write_tsv(selected_clones_data,
+            file.path(project_data_dir, "selected_clones/selected_clones_data.tsv"),
+            na = "")
+
+```
+
+
+```{r save data per clone}
+
+for (SL in selected_clones_summary_data[[clone_var]]) {
+    SL_dir <- file.path(project_data_dir, "selected_clones", paste0("SL_", SL))
+    if (! dir.exists(SL_dir)) {
+        fs::dir_create(SL_dir)
+    }
+    SL_data <- selected_clones_data %>% 
+        dplyr::filter(!!sym(clone_var) == SL)
+    # write clone data
+    readr::write_tsv(SL_data,
+              file.path(SL_dir, paste0("SL_", SL, "_data.tsv")),
+              na = "")
+    # write clone read paths
+    SL_data %>% 
+        dplyr::filter(! is.na(read_path)) %>% 
+        {
+            if (nrow(.) == nrow(SL_data)) {
+                as.data.frame(.) %>% 
+                dplyr::pull(read_path) %>%
+                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
+            } else {
+                print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing read paths"))
+                as.data.frame(.) %>% 
+                dplyr::pull(read_path) %>%
+                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
+            }
+        }
+    # write assembly paths
+    SL_data %>% 
+        dplyr::filter(! is.na(assembly_path)) %>% 
+        {
+            if (nrow(.) == nrow(SL_data)) {
+                as.data.frame(.) %>% 
+                dplyr::pull(assembly_path) %>%
+                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
+            } else {
+                
+                print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing assembly paths"))
+                as.data.frame(.) %>% 
+                dplyr::pull(assembly_path) %>%
+                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
+            }
+        }
+}
+
+```
+
+
+
+
+
+
+
+

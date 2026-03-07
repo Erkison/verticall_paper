@@ -1,0 +1,273 @@
+---
+title: "`r params$clone` Bactdating test run gubbins (`r params$iterations` iterations)"
+params:
+    clone: SL_1
+    iterations: 100000
+    seed: 3
+    tree_for_bactdate: rooted_tree_rec
+    n_alignment_sites: 1
+    best_model: relaxedgamma
+    run_mode: full
+    na_year: include
+---
+
+```{r setup, include=FALSE, message=F}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Table of contents
+- [Root-to-tip regression](#roottotip)  
+- [BactDating MCMC model selection](#bactdatingmodelselection)
+- [BactDating MCMC analysis plots](#bactdatingmcmcplots)
+
+
+## Set up
+
+```{r set_vars}
+clone <- params$clone
+clone
+seed <- params$seed
+seed
+chain_length <- params$iterations
+chain_length
+tree_for_bactdate <- params$tree_for_bactdate
+tree_for_bactdate
+
+if (tree_for_bactdate == 'rooted_tree_rec') {
+    bd_use_rec = T
+} else {
+    bd_use_rec = F
+}
+
+# Set R project directory
+project_dir <- "~/erkison/klebs_dataset/"
+
+# Set genome analyses directory (for gubbins and other output)
+genome_analyses_dir <- file.path(project_dir, clone)
+
+# Set seed
+set.seed(seed)
+
+# Set burnin proportion for MCMC runs
+burnin_prop <- 0.5
+run_mode <- params$run_mode
+na_year <- params$na_year
+
+```
+
+
+## Load packages & track versions
+
+<details>
+<summary>Click to expand</summary>
+    ```{r load_packages}
+    # R version
+    R.Version()$version.string
+    
+    # Reporting
+    library(knitr)
+    packageVersion("knitr")
+    
+    # Wrangling
+    library(tidyverse)
+    packageVersion("tidyverse")
+    
+    library(lubridate)
+    packageVersion("lubridate")
+    
+    library(coda)
+    packageVersion("coda")
+    
+    # Phylo
+    library(BactDating)
+    packageVersion("BactDating")
+    
+    library(ape)
+    packageVersion("ape")
+    
+    library(ggtree)
+    packageVersion("ggtree")
+    
+    library(treeio)
+    packageVersion("treeio")
+    
+    # Custom functions
+    source(file.path(project_dir, "bactdating/scripts/bactdating_functions.R"))
+    ```
+</details>  
+
+<br>
+
+## Import data
+
+<details>
+<summary>Click to expand</summary>
+```{r import_data}
+# Read in all clones data
+clone_data <-
+    readr::read_tsv(file.path(project_dir, clone, paste0(clone, "_data.tsv")),
+                    show_col_types = F)
+
+# get_clone_data_for_bactdate
+
+# Get and format isolate dates and gubbins tree
+assign(glue::glue("{clone}_data_for_bactdate"),
+       prepare_bactdate_data(clone_data, 
+                             gubbins_dir=file.path(genome_analyses_dir, "gubbins"))
+)
+
+tree <- get(glue::glue("{clone}_data_for_bactdate"))$tree
+dates_rtt <- get(glue::glue("{clone}_data_for_bactdate"))$dates_rtt
+dates_bactdate <- get(glue::glue("{clone}_data_for_bactdate"))$dates_bactdate
+
+if (na_year == "exclude"){
+    # Exclude leaves with missing year info (NA)
+    index_dates_to_drop <- which(is.na(dates_rtt))
+    if(length(index_dates_to_drop) >= 1){
+        dates_rtt <- dates_rtt[-index_dates_to_drop]
+        dates_bactdate <- dates_bactdate[-index_dates_to_drop,]
+        tree <- treeio::drop.tip(tree, names(index_dates_to_drop)) %>% 
+            phangorn::midpoint()
+        print(glue::glue("Excluded {length(index_dates_to_drop)} samples with NA year."))
+    }
+}
+
+# optionally exclude other samples, if specified
+other_ids_to_drop <- c("")
+idx_other_ids_to_drop <- which(names(dates_rtt) %in% other_ids_to_drop)
+if (length(idx_other_ids_to_drop) >= 1) {
+    dates_rtt <- dates_rtt[-idx_other_ids_to_drop]
+    dates_bactdate <- dates_bactdate[-idx_other_ids_to_drop,]
+    tree <- treeio::drop.tip(tree, other_ids_to_drop) %>% 
+            phangorn::midpoint()
+    print(glue::glue("Excluded {paste0(other_ids_to_drop, collapse=', ')}."))
+}
+
+# Plot tree
+plot(tree, show.tip.label = F)
+ape::axisPhylo(backward=F)
+
+# initial tree rooting based on best root-to-tip correlation
+rooted_tree <- BactDating::initRoot(tree, dates_rtt)
+rooted_tree_rec <- BactDating::initRoot(tree, dates_rtt, useRec = T)
+
+```
+</details>  
+
+<br>
+
+## Root-to-tip regression analysis for temporal signal {#roottotip}
+
+<details>
+<summary>Click to expand</summary>
+```{r root_to_tip_regression}
+# Root to tip regression (unrooted init tree)
+BactDating::roottotip(tree, dates_rtt) 
+# Root to tip regression (rooted init tree with )  
+BactDating::roottotip(rooted_tree, dates_rtt)
+# Root to tip regression (rooted init tree with gubbins recomb info)
+BactDating::roottotip(rooted_tree_rec, dates_rtt)
+
+# set what tree to use for BactDating runs
+tree_for_bactdate <- get(tree_for_bactdate) # use preset params
+# or simply reset based on RTT results. E.g., tree_for_bactdate <- rooted_tree_rec
+tree_for_bactdate
+```
+</details>
+
+<br>
+
+## MCMC BactDating model selection {#bactdatingmodelselection}
+
+<details>
+<summary>Click to expand</summary>
+```{r strict}
+
+if(! ape::is.rooted(tree_for_bactdate)){
+    tree_for_bactdate <- phangorn::midpoint(tree_for_bactdate)
+}
+
+# Strict clock
+strict_out <- file.path(project_dir, "bactdating", clone, "with_gubbins",
+                        glue::glue("{clone}_strict_mcmc_{chain_length}.rds"))
+if (run_mode == "resume" & file.exists(strict_out)){
+    bactdating_strict_mcmc <- readRDS(strict_out)
+} else {
+    # Run bactdate
+    bactdating_strict_mcmc <- BactDating::bactdate(
+        tree_for_bactdate, dates_bactdate, model='mixedgamma', nbIts=chain_length,
+        useRec=bd_use_rec, updateRoot=T, showProgress=F)
+}
+bactdating_strict_mcmc
+plot(bactdating_strict_mcmc, type="trace")
+try(plot(bactdating_strict_mcmc, type="scatter"))
+bactdating_strict_mcmc$pstrict
+saveRDS(bactdating_strict_mcmc, file=strict_out)
+
+bd_strict_mcmc_summary <- extract_bactdating_summary(bactdating_strict_mcmc, 
+                                                     clone, burnin_prop)
+write_tsv(bd_strict_mcmc_summary,
+          file.path(sub(".rds", ".tsv", strict_out)))
+```
+
+```{r relaxed}
+# Relaxed clock
+relaxed_out <- file.path(project_dir, "bactdating", clone, "with_gubbins",
+                         glue::glue("{clone}_relaxed_mcmc_{chain_length}.rds"))
+if (run_mode == "resume" & file.exists(relaxed_out)){
+    bactdating_relaxed_mcmc <- readRDS(relaxed_out)
+} else {
+    # Run bactdate
+    bactdating_relaxed_mcmc <- BactDating::bactdate(
+        tree_for_bactdate, dates_bactdate, model='relaxedgamma', nbIts=chain_length,
+        useRec=bd_use_rec, updateRoot=T, showProgress=F)
+}
+bactdating_relaxed_mcmc
+plot(bactdating_relaxed_mcmc,type='trace')
+try(plot(bactdating_relaxed_mcmc, type="scatter"))
+bactdating_relaxed_mcmc$prelaxed
+saveRDS(bactdating_relaxed_mcmc, file=relaxed_out)
+
+bd_relaxed_mcmc_summary <- extract_bactdating_summary(bactdating_relaxed_mcmc, 
+                                                     clone, burnin_prop)
+write_tsv(bd_relaxed_mcmc_summary,
+          file.path(sub(".rds", ".tsv", relaxed_out)))
+```
+
+```{r model_selection}
+# Check if ESS sufficient for model comparison
+coda::effectiveSize(BactDating::as.mcmc.resBactDating(bactdating_strict_mcmc, burnin = burnin_prop))
+coda::effectiveSize(BactDating::as.mcmc.resBactDating(bactdating_relaxed_mcmc, burnin = burnin_prop))
+
+# Compare models
+BactDating::modelcompare(bactdating_strict_mcmc,bactdating_relaxed_mcmc)
+
+```
+</details>
+
+<br>
+
+## MCMC plots both models {#bactdatingmcmcplots}
+
+<details>
+<summary>Click to expand</summary>
+```{r mcmc_plots}
+
+# Plot strict clock model tree with CI
+plot(bactdating_strict_mcmc,'treeCI', show.tip.label = F)
+
+# Plot strict clock most likely root
+plot(bactdating_strict_mcmc,'treeRoot', show.tip.label=F)
+
+
+# Plot relaxed clock tree with CI
+plot(bactdating_relaxed_mcmc,'treeCI', show.tip.label = F)
+
+# Plot relaxed clock most likely root
+plot(bactdating_relaxed_mcmc,'treeRoot', show.tip.label=F)
+
+```
+</details>
+
+<br>
+

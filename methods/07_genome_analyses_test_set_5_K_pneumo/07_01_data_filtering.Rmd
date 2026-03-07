@@ -1,0 +1,206 @@
+---
+title: "Dataset filtering"
+date: "24 July 2023"
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=F, echo = F, warning = F, message = F, tidy = T, comment = "", dev = "svg")
+```
+
+```{r pkgs}
+library(tidyverse)
+library(glue)
+library(naniar)
+library(fs)
+```
+
+```{r}
+# Vars
+project_dir <- here::here()
+project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs/")
+fnxs_dir <- file.path(project_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/bin/")
+
+source(file.path(fnxs_dir, "filtering_and_clone_selection_functions.R"))
+```
+
+
+## Datasets
+```{r datasets}
+# local data
+all_data <- readRDS(file = file.path(project_data_dir, "all_data.rds"))
+
+```
+
+
+## Data filtering
+
+```{r general filters}
+n_samples <- nrow(all_data)
+# exclude weak species match and non-pneumoniae
+n_weak_species_match <- all_data %>% dplyr::filter(species_match == "weak") %>% nrow()
+n_non_pneumoniae <- all_data %>% dplyr::filter(species != "Klebsiella pneumoniae") %>% nrow()
+filtered_data <- all_data %>% 
+    dplyr::filter(species == "Klebsiella pneumoniae") %>% 
+    dplyr::filter(species_match != "weak") 
+```
+Of the `r n_samples` samples, non-pneumoniae (n = `r n_non_pneumoniae`) genomes and genomes with 'weak' species match (n = `r n_weak_species_match`) were excluded 
+
+<br> 
+
+### Assembly QC
+
+```{r assembly_QC}
+n_samples <- nrow(filtered_data)
+
+# set cut offs
+strict_cutoff <- list(contig_count = 500, N50 = 20000,
+                      total_size = "4969898-6132846",
+                      GC = "56.35-57.98")
+qc_cut_offs <- data.frame(Metric = names(strict_cutoff),
+                          strict_cutoff = unlist(strict_cutoff),
+                          row.names = NULL)
+cut_off <- "strict_cutoff" # set cut off to use
+qc_cols <- qc_cut_offs$Metric
+
+# tabulate range of QC metrics
+qc_range_and_cutoffs <- get_qc_range(filtered_data, qc_cols) %>% 
+    dplyr::left_join(qc_cut_offs %>% dplyr::select(Metric, all_of(cut_off)), by = c("Metric")) %>% 
+    dplyr::rename("cut_off" = !!cut_off) %>% 
+    rowwise() %>% # apply the ff calculations independently for each row
+    # set min cut offs
+    dplyr::mutate( min_cut_off = dplyr::case_when(
+        grepl("N50|total_size|GC", Metric) ~ str_split(cut_off, "-")[[1]][1],
+        TRUE ~ NA
+    )) %>% 
+    # set max cut offs
+    dplyr::mutate( max_cut_off = dplyr::case_when(
+        Metric == "contig_count" ~ cut_off,
+        grepl("total_size|GC", Metric) ~ str_split(cut_off, "-")[[1]][2],
+        TRUE ~ NA
+    )) %>% 
+    dplyr::mutate(min_cut_off = as.numeric(min_cut_off),
+           max_cut_off = as.numeric(max_cut_off)) %>% 
+    # count samples to be excluded based on cut offs
+    dplyr::mutate(samples_excluded = dplyr::case_when(
+        Metric == "contig_count" ~ {
+                 filtered_rows <- filtered_data %>% 
+                     dplyr::filter(contig_count > max_cut_off)
+                 nrow(filtered_rows)
+             },
+        Metric == "N50" ~ {
+                 filtered_rows <- filtered_data %>% 
+                     dplyr::filter(N50 < min_cut_off)
+                 nrow(filtered_rows)
+             },
+        Metric == "total_size" ~ {
+                 filtered_rows <- filtered_data %>% 
+                     dplyr::filter(total_size < min_cut_off | total_size > max_cut_off)
+                 nrow(filtered_rows)
+             },
+        Metric == "GC" ~ {
+                 filtered_rows <- filtered_data %>% 
+                     dplyr::filter(GC < min_cut_off | GC > max_cut_off)
+                 nrow(filtered_rows)
+             },
+        TRUE ~ 0
+        )
+    ) %>% 
+    # define the filters to apply; as will be used in the `filter` function
+    dplyr::mutate(qc_filter  = dplyr::case_when(
+        grepl("N50", Metric) ~ paste("N50 >=", min_cut_off),  
+        grepl("contig_count", Metric) ~ paste("contig_count <=", max_cut_off), 
+        grepl("total_size", Metric) ~ paste("between(total_size,", min_cut_off, ",", max_cut_off, ")"),
+        grepl("GC", Metric) ~ paste("between(GC,", min_cut_off, ",", max_cut_off, ")"),
+        TRUE ~ as.character(cut_off)
+    )) %>% 
+    dplyr::mutate(cut_off = dplyr::case_when(
+        grepl("total_size", Metric) ~ paste(min_cut_off, "<= total_size <=", max_cut_off),
+        grepl("GC", Metric) ~ paste(min_cut_off, "<= GC <=", max_cut_off),
+        TRUE ~ qc_filter
+    )) %>% 
+    ungroup() %>% 
+    dplyr::select(Metric, `Range in dataset`, cut_off, qc_filter, samples_excluded) 
+
+
+# Pull QC conditions
+qc_filtering_conditions <- qc_range_and_cutoffs %>% pull(qc_filter)
+
+# filter data using pulled conditions
+filtered_data %<>%  dplyr::filter(!!!rlang::parse_exprs(qc_filtering_conditions)) 
+
+# tabulate range of QC metrics after filtering
+qc_range_after_filter <- get_qc_range(filtered_data, qc_cols) %>% 
+    dplyr::rename(`Range in filtered dataset` = `Range in dataset`)
+
+# print QC range, cut_offs, and number of excluded data
+total_excluded_data <- glue::glue("Samples excluded (n = {n_samples - nrow(filtered_data)} of {n_samples})")
+
+qc_range_and_cutoffs %<>% 
+    dplyr::rename(!!rlang::sym(total_excluded_data) := "samples_excluded") %>% 
+    dplyr::rename("Cut off" = "cut_off") %>% 
+    dplyr::select(-qc_filter) %>% 
+    dplyr::left_join(qc_range_after_filter)
+
+knitr::kable(qc_range_and_cutoffs, caption = "Applied assembly QC filters")
+```
+
+<br> 
+
+### K and O locus QC
+
+```{r K and O QC}
+ko_qc_cols <- c("K_locus_confidence", "O_locus_confidence")
+n_samples <- nrow(filtered_data)
+
+# set cut offs
+ko_cut_offs <- c("Perfect", "Very high", "High", "Good")
+ko_qc_applied_cutoffs <- data.frame(Metric = ko_qc_cols) %>% 
+    dplyr::mutate(cut_off = paste0(ko_cut_offs, collapse = ", "))
+
+# Counnt samples to be filtered with each condition
+ko_qc_applied_cutoffs %<>% 
+    rowwise() %>% # apply the ff calculations independently for each row
+    dplyr::mutate(samples_excluded = dplyr::case_when(
+        Metric == ko_qc_cols[1] ~ filtered_data %>% 
+                    dplyr::filter(! (!!rlang::sym(ko_qc_cols[1])) %in% ko_cut_offs) %>% 
+                    nrow(),
+        Metric == ko_qc_cols[2] ~ filtered_data %>% 
+                    dplyr::filter(! (!!rlang::sym(ko_qc_cols[2])) %in% ko_cut_offs) %>% 
+                    nrow(),
+        TRUE ~ 0
+        )
+    )
+
+# Apply KO QC filters 
+filtered_data %<>% 
+    dplyr::filter(!!rlang::sym(ko_qc_cols[1]) %in% ko_cut_offs) %>%
+    dplyr::filter(!!rlang::sym(ko_qc_cols[2]) %in% ko_cut_offs)
+
+# print cut_offs and number of excluded data based on KO QC
+total_excluded_data <- glue::glue("Samples excluded (n = {n_samples - nrow(filtered_data)} of {n_samples})")
+ko_qc_applied_cutoffs %<>% 
+    dplyr::rename(!!rlang::sym(total_excluded_data) := "samples_excluded") %>% 
+    dplyr::rename("Cut off" = "cut_off")
+
+knitr::kable(ko_qc_applied_cutoffs, caption = "Applied K and O locus QC filters")
+
+```
+
+<br> 
+
+<b>Final filtered data = `r nrow(filtered_data)` samples.</b>
+
+
+```{r}
+# Save filtered and cleaned data
+saveRDS(filtered_data, file = file.path(project_data_dir, "all_data_filtered.rds"))
+```
+
+
+
+
+
+

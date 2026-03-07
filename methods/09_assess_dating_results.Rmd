@@ -1,0 +1,739 @@
+---
+title: "Compare recombination removal methods for dating analysis"
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE, message=F}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+<br>
+
+```{r load packages, warning=F, message=F}
+library(tidyverse)
+library(glue)
+library(ggplot2)
+library(ggbreak)
+library(plotly)
+library(ggpubr)
+library(ape)
+library(patchwork)
+
+```
+
+```{r}
+main_dir <- here::here()
+kpn_data_dir <- file.path(main_dir, "data/dataset_5__Klebsiella_pneumoniae_SLs")
+selected_clones_data <- read_tsv(file.path(kpn_data_dir, "selected_clones/selected_clones_data.tsv"),
+                                 show_col_types = F)
+comp_figs_dir <- file.path(main_dir, "figures")
+fs::dir_create(comp_figs_dir)
+
+method_map <- c("VA" = "Verticall alignment",
+                "VD" = "Verticall distance",
+                "GB" = "Gubbins")
+method_cols <- c("Verticall alignment"="#0DCDFB", 
+                 "Verticall distance"="#0039a6",
+                 "Gubbins"="maroon")
+
+custom_plots_theme2 <- ggplot2::theme(
+    axis.text = element_text(size = 14), axis.title = element_text(size = 16),
+    plot.title = element_text(size = 16), legend.text = element_text(size = 14),
+    legend.title = element_text(size = 16), legend.position = "bottom")
+custom_plots_theme <- ggplot2::theme(
+    axis.text=element_text(size=12), axis.title=element_text(size=12),
+    legend.text=element_text(size=12), legend.title=element_text(size=12),
+    plot.title=element_text(size=12), legend.position = "bottom")
+```
+
+```{r, fig.height=7, fig.width=10}
+# nucleotide divergence
+all_SLs <- list.files(file.path(kpn_data_dir, "selected_clones"), pattern="SL_*", full.names=T)
+mean_dist_tsvs <- fs::dir_ls(file.path(all_SLs, "verticall_dist"), 
+                             glob="*_mean_distance.tsv") %>% as.character()
+mean_dists <- mean_dist_tsvs %>% purrr::map_df(
+    ~ read_tsv(., show_col_types = F) %>%
+        filter(result_level == "primary") %>% 
+        reframe(mean_distance = mean(mean_distance)) %>%
+        mutate(Sublineage = sub("_mean_distance.tsv", "", basename(.x)))) %>% 
+    select(Sublineage, mean_distance) %>% 
+    mutate(nuc_divergence = mean_distance*100) %>% 
+    mutate(Sublineage = sub("SL_", "SL",  Sublineage))
+
+# load K pneumo bactdating data
+kp_bd_results_raw <- readxl::read_xlsx(file.path(main_dir, "data/BactDate_results.xlsx"), 
+                                 sheet = "bactdating_kp_results", skip = 2) %>% 
+    mutate(Sublineage = paste0("SL", Sublineage)) %>% 
+    mutate(across(c(3:last_col()), \(x) as.character(x)))
+
+# performance summary data
+kp_bd_performance <- kp_bd_results_raw %>% 
+    filter(! Sublineage %in% c("SL10226", "SL11518")) %>% # Could not run Gubbins or VA so exclude
+    select(Sublineage, N_isolates, GB=ESS_gubbins, VA=ESS_vr, VD=ESS_vd)
+
+kp_bd_performance_long <- kp_bd_performance %>% 
+    pivot_longer(cols=-c(Sublineage, N_isolates), names_to="method", values_to="convergence") %>% 
+    mutate(convergence = if_else(convergence == "All >=200", "Converged", "No/poor convergence")) %>% 
+    mutate(method = factor(method, levels=c("GB", "VA","VD"))) %>% 
+    mutate(convergence = factor(convergence, levels=c("No/poor convergence", "Converged"))) %>% 
+    mutate(Converged = if_else(convergence == "Converged", "Yes", "No")) %>%
+    mutate(Converged = factor(Converged, levels = c("No", "Yes"))) %>%
+    left_join(mean_dists, by = "Sublineage") %>% 
+    # rescale for glmm model
+    mutate(N_isolates_z = scale(N_isolates), nuc_divergence_z = scale(nuc_divergence))
+
+```
+
+```{r, fig.height=8, fig.width=9}
+cov_meth_cols <- c(
+        "All" = "#008000", 
+        "GB and VD" = "#FF00B6",
+        "GB and VA" = "#FDDA0D", 
+        "VA and VD" = "black",
+        "Only GB" = "maroon",
+        "Only VA" = "#0DCDFB", 
+        "Only VD" = "#0039a6",
+        "None" = "grey70"
+    )
+# year distribution of each of the sublineages
+all_years_df <- kp_bd_performance %>% 
+    mutate(Convergence = case_when(
+        GB=="All >=200" & VA=="All >=200" & VD=="All >=200" ~ "All",
+        GB=="All >=200" & VA=="All >=200" ~ "GB and VA",
+        GB=="All >=200" & VD=="All >=200" ~ "GB and VD",
+        VA=="All >=200" & VD=="All >=200" ~ "VA and VD",
+        GB=="All >=200" ~ "Only GB",
+        VA=="All >=200" ~ "Only VA",
+        VD=="All >=200" ~ "Only VD",
+        TRUE ~ "None"
+    )) %>% 
+    mutate(Convergence = factor(Convergence, levels=names(cov_meth_cols))) %>% 
+    select(Sublineage, Convergence) %>% 
+    left_join(selected_clones_data %>% 
+                  select(Sublineage, id, year) %>% 
+                  mutate(Sublineage = paste0("SL", Sublineage)),
+              by = "Sublineage") %>% 
+    arrange(Convergence) %>% 
+    mutate(Sublineage = factor(Sublineage, levels=rev(unique(Sublineage))))
+
+all_years_plot <- all_years_df %>% ggplot(aes(x=year, y=Sublineage)) +
+    geom_jitter(aes(color=Convergence), height=0.1, width=0.25) +
+    scale_color_manual(values=cov_meth_cols) +
+    labs(x="Year", title="Distribution of isolation dates") +
+    theme_minimal() + # custom_plots_theme +
+    theme(axis.text.x = element_text(angle=45,vjust=1, hjust=1))
+# ggsave(file=file.path(comp_figs_dir, "all_years_plot.png"), 
+#        plot=all_years_plot, width=10, height=10, bg='white')
+
+# all_years_plot
+```
+
+<br>
+
+## Performance summary
+
+```{r performance_summary, fig.height=6, fig.width=8}
+performance_summary_plot <- kp_bd_performance_long %>% 
+    group_by(method, convergence) %>% summarise(count = n()) %>% 
+    mutate(method = factor(method, levels = names(method_map))) %>% 
+    ggplot(aes(x=count, y=method, fill=convergence)) +
+    geom_col() +
+    geom_text(stat = "identity", aes(label = count, color=convergence), 
+              position = position_stack(vjust = 0.5), size=4) +
+    scale_fill_manual(values=c("#C7EAE5", "#01665E"), 
+                      guide=guide_legend(reverse=T)) +
+    scale_colour_manual(values=c("black", "white")) +
+    labs(y=NULL, x="Number of sublineages", fill=NULL,
+         title="No. of converged runs per method") +
+    guides(colour = "none") +
+    theme_bw() +
+    custom_plots_theme +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=12))
+
+# ggsave(file=file.path(comp_figs_dir, "performance_plot.png"),
+#        plot=performance_summary_plot, width=6, height=4, bg = 'white')
+
+# performance_summary_plot
+```
+
+```{r converged_runs, fig.height=6, fig.width=10}
+# For each sublineage, what methods restored temporal signal
+runs_that_coverged <- all_years_df %>% select(Sublineage, Convergence) %>% unique() %>%
+    count(Convergence) %>% arrange(desc(n)) %>%
+    mutate(Convergence = factor(Convergence, levels=rev(c(
+        setdiff(Convergence, "None"), "None")))) %>%
+    ggplot(aes(y=Convergence, x=n)) +
+    geom_bar(stat="identity", aes(fill=Convergence)) +
+    geom_text(stat = "identity", aes(label = n, color=Convergence), size=4,
+              position=position_stack(vjust = 0.5)) +
+    scale_fill_manual(values=c("#C7EAE5", rep("#01665E",length(unique(all_years_df$Convergence))-1))) +
+    scale_color_manual(values=c("black", rep("white", length(unique(all_years_df$Convergence))-1))) +
+    labs(title="Methods producing convergent runs", y=NULL, x="Number of sublineages") + 
+    guides(fill="none", color="none") +
+    theme_bw() +
+    custom_plots_theme +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=12))
+# ggsave(file=file.path(comp_figs_dir, "runs_that_coverged.png"), 
+#        plot=runs_that_coverged, width=7, height=4, bg = 'white')
+
+
+combined_perf_summary_plots <- ggarrange(
+    runs_that_coverged, performance_summary_plot,
+    labels="AUTO", common.legend=T, legend="bottom", align="h", 
+    font.label=list(size=16, face="bold", color="black"))
+combined_perf_summary_plots
+# ggsave(file=file.path(comp_figs_dir, "FigureSX_BactDatePerformance.png"), 
+#        plot=combined_perf_summary_plots, width=14, height=6, bg = 'white')
+```
+
+<br>
+
+```{r predictors_of_convergence}
+kp_bd_performance_long %>% 
+    ggplot(aes(x = Converged, y = N_isolates)) + geom_boxplot() + 
+    geom_jitter(width=0.1) + facet_wrap(~method) +
+    labs(y = "No. of isolates")
+kp_bd_performance_long %>% 
+    ggplot(aes(x = Converged, y = nuc_divergence)) + geom_boxplot() + 
+    geom_jitter(width=0.1) + facet_wrap(~method) +
+    labs(y = "Nucleotide divergence")
+
+library(lme4)
+
+kp_bd_performance_long %<>% mutate(method = factor(method, levels=c("GB", "VA", "VD")))
+
+kp_bd_model <- glmer(Converged ~ N_isolates_z + nuc_divergence_z + method + (1 + nuc_divergence_z | Sublineage),
+               data = kp_bd_performance_long, family = binomial)
+summary(kp_bd_model)
+kp_bd_model_df <- summary(kp_bd_model)$coefficients[-1,] %>% 
+    as_tibble(rownames = "Predictor") %>% 
+    rename(P = `Pr(>|z|)`, StdErr = `Std. Error`) %>% 
+    mutate(OR = round(exp(Estimate), 2),
+           lower = round(exp(Estimate - (1.96 * StdErr)), 2),
+           upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>% 
+    select(Predictor, Estimate, StdErr, OR, lower, upper, P)
+
+
+
+kp_bd_model1 <- logistf::logistf("Converged ~ N_isolates_z + nuc_divergence_z + method", data=kp_bd_performance_long)
+summary(kp_bd_model1)
+kp_bd_model1_df <- cbind(kp_bd_model1$coefficients, diag(kp_bd_model1$var)^0.5, kp_bd_model1$prob)[-1,] %>%
+    as_tibble(rownames = "Predictor") %>%
+    rename(Estimate = V1, StdErr = V2, P = V3) %>%
+    mutate(OR = round(exp(Estimate), 2),
+           lower = round(exp(Estimate - (1.96 * StdErr)), 2),
+           upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>%
+    select(Predictor, Estimate, StdErr, OR, lower, upper, P)
+
+
+
+
+
+```
+
+<br>
+
+## Comparison of inferred parameters
+#### ...comparing only sublineages for which all 3 methods produced convergent runs with ESS >= 200 for all parameters
+
+```{r compare_estimated_params}
+kp_bd_results_long <- kp_bd_results_raw %>% 
+    pivot_longer(cols = -c(Sublineage, N_isolates), 
+                 names_to = "parameter", values_to = "value") %>% 
+    arrange(Sublineage) %>% 
+    mutate(method = case_when(
+        grepl("_gubbins$", parameter) ~ "GB", 
+        grepl("_vr$", parameter) ~ "VA", 
+        grepl("_vd$", parameter) ~ "VD", 
+        TRUE ~ NA_character_)) %>% 
+    mutate(parameter = gsub("_gubbins$|_vr$|_vd$", "", parameter)) %>% 
+    pivot_wider(id_cols = c(Sublineage, N_isolates, method), names_from=parameter, values_from=value) %>% 
+    mutate(method = factor(method, levels=c("GB","VA","VD"))) %>% 
+    separate_wider_regex(mu, c(mu=".*", " \\[", mu_lower=".*", ";", mu_upper=".*", "\\]")) %>% 
+    separate_wider_regex(root_date, c(root_date=".*", " \\[", root_date_lower=".*", 
+                                      ";", root_date_upper=".*", "\\]")) %>% 
+    type_convert()
+
+neg_root_dates <- kp_bd_results_long %>% filter(root_date < 0 | root_date_lower < 0) 
+converged_SLs_all_workflows <- kp_bd_results_raw %>% 
+    filter(ESS_gubbins=="All >=200" & ESS_vr=="All >=200" & ESS_vd=="All >=200") %>% 
+    pull(Sublineage)
+
+# kp_bd_results_long %>% 
+#     mutate(results = if_else(
+#         ESS == "All >=200", 
+#         sprintf("Mu: %.1f [%.1f-%.1f]; Root date: %.1f [%.1f-%.1f]", 
+#                 mu, mu_lower, mu_upper, root_date, root_date_lower, root_date_upper), 
+#         "-")) %>% 
+#     pivot_wider(id_cols = Sublineage, names_from = method, values_from = results) %>%
+#     write_tsv("~/Desktop/bd_results.tsv")
+
+
+
+# Converged runs
+kp_bd_results_converged <- kp_bd_results_long %>% 
+    filter(! Sublineage %in% neg_root_dates$Sublineage) %>% 
+    filter(Sublineage %in% converged_SLs_all_workflows)
+
+SL_order <- kp_bd_results_converged %>%  filter(method =="GB") %>% arrange(mu) %>% pull(Sublineage)
+```
+
+<br> 
+
+```{r compare_dics, fig.width=12, fig.height=8}
+dic_plot <- kp_bd_results_converged %>% 
+    mutate(Sublineage = factor(Sublineage, levels=SL_order)) %>% 
+    mutate(method = recode(method, !!! method_map)) %>%  
+    mutate(method = factor(method, levels = unname(method_map))) %>% 
+    ggplot(aes(x=dic, y=Sublineage, fill=method)) +
+    geom_col(position = position_dodge(), width=0.7) +
+    labs(x="DIC", y=NULL, title="DIC", fill=NULL) +
+    scale_fill_manual(values=c(method_cols)) +
+    theme_minimal() + custom_plots_theme 
+# dic_plot
+```
+
+### Overlaps between estimated parameters
+
+```{r check_overlaps, echo=FALSE}
+# Substitution rates overlaps across all workflows and compared to Gubbins
+comp_df_mu_wide <- kp_bd_results_converged %>% select(Sublineage, method, mu, mu_lower, mu_upper) %>% 
+    pivot_longer(cols = -c(Sublineage, method)) %>% 
+    pivot_wider(id_cols = c(Sublineage), names_from = c(method, name), values_from = value) %>% 
+    rowwise() %>% 
+    mutate(all_overlap = if_else(max(GB_mu_lower,VD_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VD_mu_upper,VA_mu_upper),
+                       "Yes", "No")) %>% 
+    mutate(VD_GB_overlap = if_else(max(GB_mu_lower,VD_mu_lower) <= min(GB_mu_upper,VD_mu_upper),
+                       "Yes", "No")) %>% 
+    mutate(VA_GB_overlap = if_else(max(GB_mu_lower,VA_mu_lower) <= min(GB_mu_upper,VA_mu_upper),
+                       "Yes", "No")) %>% 
+    mutate(VD_VA_overlap = if_else(max(VD_mu_lower,VA_mu_lower) <= min(VD_mu_upper,VA_mu_upper),
+                       "Yes", "No")) %>% 
+    ungroup()
+
+overlaps_mu <- comp_df_mu_wide %>% count(all_overlap)
+
+# Root dates overlaps across all workflows and compared to Gubbins
+comp_df_rd_wide <- kp_bd_results_converged %>% 
+    select(Sublineage, method, rd=root_date, rd_lower=root_date_lower, rd_upper=root_date_upper) %>% 
+    pivot_longer(cols = -c(Sublineage, method)) %>% 
+    pivot_wider(id_cols = c(Sublineage), names_from = c(method, name), values_from = value) %>% 
+    rowwise() %>% 
+    mutate(all_overlap = if_else(max(GB_rd_lower,VD_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VD_rd_upper,VA_rd_upper),
+                       "Yes", "No")) %>% 
+    mutate(VD_GB_overlap = if_else(max(GB_rd_lower,VD_rd_lower) <= min(GB_rd_upper,VD_rd_upper),
+                       "Yes", "No")) %>% 
+    mutate(VA_GB_overlap = if_else(max(GB_rd_lower,VA_rd_lower) <= min(GB_rd_upper,VA_rd_upper),
+                       "Yes", "No")) %>% 
+    mutate(VD_VA_overlap = if_else(max(VD_rd_lower,VA_rd_lower) <= min(VD_rd_upper,VA_rd_upper),
+                       "Yes", "No")) %>% 
+    ungroup()
+overlaps_rd <- comp_df_rd_wide %>% count(all_overlap)
+
+
+comp_df_mu_wide %>% count(VD_GB_overlap) %>% mutate(pct = (n/nrow(comp_df_mu_wide))*100)
+comp_df_rd_wide %>% count(VD_GB_overlap) %>% mutate(pct = (n/nrow(comp_df_rd_wide))*100)
+
+
+```
+
+
+ 
+<br> 
+
+
+```{r mu_comparison, fig.height=8, fig.width=5, warning=F}
+# clock rate comparison
+substitution_rate_plot <- kp_bd_results_converged %>%
+    mutate(text=glue("Substition rate: {mu} [{mu_lower} - {mu_upper}]")) %>%
+    mutate(Sublineage = factor(Sublineage, levels=SL_order)) %>%
+    mutate(method = recode(method, !!! method_map)) %>%
+    mutate(method = factor(method, levels = unname(method_map))) %>% 
+    ggplot(aes(y=Sublineage, x=mu)) +
+    geom_linerange(aes(xmin=mu_lower, xmax=mu_upper, y=Sublineage, color=method),
+                   alpha=0.75, lwd=1.3, position=ggstance::position_dodgev(height=0.5)) +
+    geom_point(aes(color=method,text=text), position=ggstance::position_dodgev(height=0.5)) +
+    geom_label(aes(y=Sublineage, label=N_isolates, x=-0.5),
+               fill="white", size=3, col="black") +
+    geom_vline(xintercept = 0) +
+    scale_color_manual(values=c(method_cols)) +
+    theme_minimal() +
+    labs(x = "Substitutions per year (log10 scale)", color=NULL, y = "Sublineage",
+         title="Substitution rates (95% CI) inferred with BactDating") +
+    custom_plots_theme2 +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=16),
+          legend.position = "right") +
+    scale_x_continuous(trans = scales::pseudo_log_trans(base=10),
+                       breaks = c(0, 1, 5, 10, 25, 50, 100))
+
+# ggsave(file=file.path(comp_figs_dir, "substitution_rate_plot.png"), 
+#        plot=substitution_rate_plot, width=8, height=12, bg = 'white')
+
+```
+
+```{r mrca_comparison, fig.height=8, fig.width=12, warning=F}
+# MRCA comparison
+MRCA_plot <- kp_bd_results_converged %>% 
+    mutate(Sublineage = factor(Sublineage, levels=SL_order)) %>%
+    mutate(text=glue("Root date: {root_date} [{root_date_lower} - {root_date_upper}]")) %>% 
+    mutate(method = recode(method, !!! method_map)) %>% 
+    mutate(method = factor(method, levels = unname(method_map))) %>% 
+    ggplot(aes(y=Sublineage, x=root_date)) + 
+    geom_linerange(aes(xmin=root_date_lower, xmax=root_date_upper, y=Sublineage, color=method), 
+                   alpha=0.75, lwd=1.3, position=ggstance::position_dodgev(height=0.5)) +
+    geom_point(aes(color=method,text=text), position=ggstance::position_dodgev(height=0.5)) + 
+    scale_color_manual(values=c(method_cols)) +
+    scale_x_continuous(breaks = c(1500,1600,1700,1800,1900,2000)) +
+    coord_cartesian(xlim = c(1500, 2000)) +
+    labs(x = "Root date", color=NULL, y = "Sublineage",
+         title="Root dates (95% CI) inferred with BactDating") +
+    theme_minimal() +
+    custom_plots_theme2 +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=14),
+          legend.position = "right",
+          axis.text.x = element_text(angle=45, hjust=1, vjust=1)) # +
+    # scale_x_continuous(trans = scales::pseudo_log_trans(base=10),
+    #                    breaks = seq(800,2000,200)) +
+    # labs(x = "Root date (log10 scale)")
+
+
+# ggsave(file=file.path(comp_figs_dir, "root_date_plot.png"), 
+#        plot=MRCA_plot, width=8, height=12, bg = 'white')
+
+# MRCA_plot
+```
+
+
+```{r combine_mu_and_rd_plots_2, fig.width=15, fig.height=10}
+comp_plots <- (
+        ( substitution_rate_plot + theme_bw() + custom_plots_theme2 +
+              labs(title = "(A) Substitution rates") 
+         ) +
+        ( MRCA_plot + theme_bw() + custom_plots_theme2 + labs(title = "(B) Root dates") + 
+             theme(plot.caption=element_blank(), axis.title.y=element_blank(),
+                   axis.text.y=element_blank(), axis.text.x=element_text(angle=45, hjust=1, vjust=1))
+         ) +
+        (dic_plot + labs(title = "(C) DIC") + theme_bw() + custom_plots_theme2 + guides(fill='none') +  
+             # scale_x_continuous(trans = scales::pseudo_log_trans(base=10)) + labs(x = "DIC (log10 scale)")
+             theme(axis.text.y=element_blank(), axis.text.x = element_text(angle=45, hjust=1, vjust=1))
+         ) 
+    ) + 
+    patchwork::plot_layout(widths=c(1.2,1.2,0.6), guides="collect") & 
+    theme(legend.position='bottom', legend.key.spacing.x = unit(24, "pt"))
+
+ggsave(file=file.path(comp_figs_dir, "Figure8_BactDateEstimatesKpn.png"),
+       plot=comp_plots, width=12, height=15, bg = 'white')
+ggsave(file=file.path(comp_figs_dir, "Figure8_BactDateEstimatesKpn.tif"),
+       plot=comp_plots, width=12, height=12, bg = 'white')
+
+comp_plots
+```
+
+
+<br><br>
+
+## Agreement between methods 
+
+### Substitution rates
+
+```{r icc_mu}
+library(irr)
+
+# Agreement between methods for substitution rates estimation --------------------
+mu <- kp_bd_results_converged %>% select(Sublineage, method, mu) %>% 
+    pivot_wider(id_cols = Sublineage, names_from = method, values_from = mu) %>% 
+    select(-Sublineage)
+
+icc_type <- "agreement"
+mu_icc <- irr::icc(mu, model="twoway", type=icc_type, unit="single") # all three methods
+mu_gb_vs_vr_icc <- irr::icc(mu %>% select(GB, VA), model="twoway", type=icc_type) # gb vs vr
+mu_gb_vs_vd_icc <- irr::icc(mu %>% select(GB, VD), model="twoway", type=icc_type) # gb vs vd
+mu_vr_vs_vd_icc <- irr::icc(mu %>% select(VA, VD), model="twoway", type=icc_type) # vr vs vd
+
+# Combined ICC df
+mu_icc_df <- 
+    bind_rows(
+        data.frame(Method1="All", Method2="All", ICC=mu_icc$value, ICC_lower=mu_icc$lbound,
+                   ICC_upper=mu_icc$ubound, P_value=mu_icc$p.value),
+        data.frame(Method1="GB", Method2="VA", ICC=mu_gb_vs_vr_icc$value,
+                   ICC_lower=mu_gb_vs_vr_icc$lbound, ICC_upper=mu_gb_vs_vr_icc$ubound, 
+                   P_value=mu_gb_vs_vr_icc$p.value),
+        data.frame(Method1="GB", Method2="VD", ICC=mu_gb_vs_vd_icc$value,
+                   ICC_lower=mu_gb_vs_vd_icc$lbound, ICC_upper=mu_gb_vs_vd_icc$ubound, 
+                   P_value=mu_gb_vs_vd_icc$p.value),
+        data.frame(Method1="VA", Method2="VD", ICC=mu_vr_vs_vd_icc$value,
+                   ICC_lower=mu_vr_vs_vd_icc$lbound, ICC_upper=mu_vr_vs_vd_icc$ubound, 
+                   P_value=mu_vr_vs_vd_icc$p.value),
+    )
+
+# ICC matrix
+mu_icc_matrix <- mu_icc_df %>% filter(Method1 != "All") %>%
+    bind_rows(mu_icc_df %>% filter(Method1 != "All") %>% 
+                  rename("Method1"="Method2", "Method2"="Method1")) %>% 
+    reshape2::acast(., Method1 ~ Method2, value.var = "ICC")
+mu_icc_matrix[is.na(mu_icc_matrix)] <- 1
+mu_icc_matrix <- mu_icc_matrix[names(mu), names(mu)] # order
+
+# p values matrix
+mu_icc_pmat <- mu_icc_df %>% filter(Method1 != "All") %>%
+    bind_rows(mu_icc_df %>% filter(Method1 != "All") %>% 
+                  rename("Method1"="Method2", "Method2"="Method1")) %>% 
+    reshape2::acast(., Method1 ~ Method2, value.var = "P_value")
+mu_icc_pmat[is.na(mu_icc_pmat)] <- 0
+mu_icc_pmat <- mu_icc_pmat[names(mu), names(mu)] # order
+
+# Plot
+# ICC interpretation (Koo and Li, 2016; https://pubmed.ncbi.nlm.nih.gov/27330520/):
+# <0.5 (poor); 0.5-0.75 (moderate); 0.75-0.9 (Good); >0.9 (Excellent)
+mu_icc_plot <- {
+    corrplot::corrplot(mu_icc_matrix, type="upper", method="circle", # order="hclust", 
+                   diag=T, tl.col="black", tl.srt=0, addCoef.col = "white", number.cex=1,
+                   title="Substitution rates",
+                   is.corr=F, col.lim=c(0,1), col=c("darkred", "darkred", "orange", "darkgreen"),
+                   p.mat=mu_icc_pmat, insig="pch",
+                   mar=c(0,0,2,0));
+    grDevices::recordPlot()}
+# ggsave(file=file.path(comp_figs_dir, "substitution_rates_icc_plot.png"), 
+#        plot=grDevices::replayPlot(mu_icc_plot),  width=6, height=6, bg = 'white')
+
+
+mu_icc_df %<>% mutate(ICC = sprintf('%.2f [%.2f-%.2f]', ICC, ICC_lower, ICC_upper)) %>% 
+    select(-c(ICC_lower, ICC_upper))
+
+# write.table(mu_icc_df, file.path(main_dir, "tables", "TableSX_SubstitutionRateAgreement.tsv"),
+#             sep='\t', row.names=F, na='')
+```
+
+
+### Root dates
+
+```{r icc_rd}
+# Agreement between methods for root dates estimation ---------------------------
+root_date <- kp_bd_results_converged %>% select(Sublineage, method, root_date) %>% 
+    pivot_wider(id_cols = Sublineage, names_from = method, values_from = root_date) %>% 
+    select(-Sublineage)
+rd_icc <- irr::icc(root_date, model="twoway", type=icc_type, unit="single") # all three methods
+rd_gb_vs_vr_icc <- irr::icc(root_date %>% select(GB, `VA`), 
+                            model="twoway", type=icc_type) # gb vs vr
+rd_gb_vs_vd_icc <- irr::icc(root_date %>% select(GB, VD), 
+                            model="twoway", type=icc_type) # gb vs vd
+rd_vr_vs_vd_icc <- irr::icc(root_date %>% select(`VA`, VD), 
+                            model="twoway", type=icc_type) # vr vs vd
+
+# Combined ICC df
+rd_icc_df <- 
+    bind_rows(
+        data.frame(Method1="All", Method2="All", ICC=rd_icc$value, ICC_lower=rd_icc$lbound,
+                        ICC_upper=rd_icc$ubound, P_value=rd_icc$p.value),
+        data.frame(Method1="GB", Method2="VA", ICC=rd_gb_vs_vr_icc$value,
+                   ICC_lower=rd_gb_vs_vr_icc$lbound, ICC_upper=rd_gb_vs_vr_icc$ubound, 
+                   P_value=rd_gb_vs_vr_icc$p.value),
+        data.frame(Method1="GB", Method2="VD", ICC=rd_gb_vs_vd_icc$value,
+                   ICC_lower=rd_gb_vs_vd_icc$lbound, ICC_upper=rd_gb_vs_vd_icc$ubound, 
+                   P_value=rd_gb_vs_vd_icc$p.value),
+        data.frame(Method1="VA", Method2="VD", ICC=rd_vr_vs_vd_icc$value,
+                   ICC_lower=rd_vr_vs_vd_icc$lbound, ICC_upper=rd_vr_vs_vd_icc$ubound, 
+                   P_value=rd_vr_vs_vd_icc$p.value),
+    )
+
+# ICC matrix
+rd_icc_matrix <- rd_icc_df %>% filter(Method1 != "All") %>%
+    bind_rows(rd_icc_df %>% filter(Method1 != "All") %>% 
+                  rename("Method1"="Method2", "Method2"="Method1")) %>% 
+    reshape2::acast(., Method1 ~ Method2, value.var = "ICC")
+rd_icc_matrix[is.na(rd_icc_matrix)] <- 1
+rd_icc_matrix <- rd_icc_matrix[names(root_date), names(root_date)] # order
+
+# p values matrix
+rd_icc_pmat <- rd_icc_df %>% filter(Method1 != "All") %>%
+    bind_rows(rd_icc_df %>% filter(Method1 != "All") %>% 
+                  rename("Method1"="Method2", "Method2"="Method1")) %>% 
+    reshape2::acast(., Method1 ~ Method2, value.var = "P_value")
+rd_icc_pmat[is.na(rd_icc_pmat)] <- 0
+rd_icc_pmat <- rd_icc_pmat[names(root_date), names(root_date)] # order
+
+# Plot
+rd_icc_plot <- {
+    corrplot::corrplot(rd_icc_matrix, type="upper", method="circle", # order="hclust", 
+                   diag=T, tl.col="black", tl.srt=0, addCoef.col = "white", number.cex=1,
+                   title="Root dates",
+                   is.corr=F, col.lim=c(0,1), col=c("darkred", "darkred", "orange", "darkgreen"),
+                   p.mat=rd_icc_pmat, insig="pch",
+                   mar=c(0,0,2,0));
+    grDevices::recordPlot()
+}
+
+
+rd_icc_df %<>% mutate(ICC = sprintf('%.2f [%.2f-%.2f]', ICC, ICC_lower, ICC_upper)) %>% 
+    select(-c(ICC_lower, ICC_upper))
+
+# write.table(rd_icc_df, file.path(main_dir, "tables", "TableSX_RootDateAgreement.tsv"),
+#             sep='\t', row.names=F, na='')
+```
+
+```{r combine_icc_plots, fig.height=7, fig.width=12}
+
+combined_icc_plots <- cowplot::plot_grid(mu_icc_plot, NULL, rd_icc_plot, nrow=1, 
+                   labels = c("(A)", "", "(B)"), rel_widths=c(1,0.2,1),
+                   label_size = 16)
+# ggsave(file=file.path(comp_figs_dir, "combined_icc_plots.svg"), 
+#        plot=combined_icc_plots, width=14, height=7, bg = 'white')
+
+```
+
+<br>
+
+## Benchmark datasets - *Streptococcus pneumoniae* ([Croucher *et al*. 2011](https://doi.org/10.1126/science.1198545))
+
+```{r S_pneumo_dataset, fig.width=12, fig.height=7}
+# load comparison data
+SP_bd_df <- readxl::read_xlsx(file.path(main_dir, "data/BactDate_results.xlsx"), 
+                               sheet = "bactdating_s_pneumo_PMEN1", skip = 0) %>%
+    filter(method %in% c(
+        "Gubbins", "Verticall alignment", "Verticall distance", "Didelot 2018"
+    )) %>% 
+    mutate(method = case_when(
+        method == "Verticall alignment" ~ "Verticall\nalignment",
+        method == "Verticall distance" ~ "Verticall\ndistance",
+        method == "Didelot 2018" ~ "Didelot \net al. 2018",
+        TRUE ~ method
+    )) %>% 
+    mutate(method = factor(method, levels = c(
+        "Verticall\nalignment", "Verticall\ndistance", 
+        "Gubbins", "Didelot \net al. 2018"
+    ))) %>% 
+    separate_wider_regex(mu, c(mu=".*", " \\[", mu_lower=".*", ";", mu_upper=".*", "\\]"), too_few="align_start") %>% 
+    separate_wider_regex(root_date, c(root_date=".*", " \\[", root_date_lower=".*", 
+                                      ";", root_date_upper=".*", "\\]"),
+                         too_few="align_start") %>% 
+    type_convert %>% 
+    mutate(across(c(root_date, root_date_lower, root_date_upper), \(x) round(x,0)))
+
+mycols2 <- c("Didelot \net al. 2018"="black", "Gubbins"="maroon", 
+             "Verticall\nalignment"="#0DCDFB", "Verticall\ndistance"="#0039a6")
+
+# clock rate comparison
+SP_bd_mu_plot <- SP_bd_df %>% 
+    mutate(text=glue("{mu} [{mu_lower} - {mu_upper}]")) %>% 
+    ggplot(aes(x=mu, y=method, color=method)) + 
+    geom_linerange(aes(xmin=mu_lower, xmax=mu_upper, color=method), alpha=0.75, lwd=1.8) +
+    geom_point(size=4) +
+    geom_text(aes(label = text, hjust=if_else(method %in% c("Didelot \net al. 2018", "Gubbins"),1,0)), 
+              size=4, vjust=2) +
+    scale_color_manual(values=mycols2) +
+    theme_bw() +
+    labs(y = NULL, x="Substitutions per year", color="Method", title="Substitution rates") +
+    custom_plots_theme +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=12)) +
+    guides(color="none")
+
+SP_bd_mrca_plot <- SP_bd_df %>% 
+    mutate(text=glue("{root_date} [{root_date_lower} - {root_date_upper}]")) %>% 
+    ggplot(aes(x=root_date, y=method, color=method)) + 
+    geom_linerange(aes(xmin=root_date_lower, xmax=root_date_upper, 
+                       color=method), alpha=0.75, lwd=1.8) +
+    geom_point(size=4) +
+    geom_text(aes(label = text), size=4, hjust=1, vjust=2) +
+    scale_color_manual(values=mycols2) +
+    theme_bw() +
+    labs(y = NULL, x="Root date", color="Method", title="Root dates") +
+    custom_plots_theme +
+    theme(plot.caption = element_text(hjust=0, face='italic', size=12),
+          axis.text.y = element_blank()) +
+    guides(color="none") 
+
+SP_bd_plots <- ggarrange(SP_bd_mu_plot, SP_bd_mrca_plot, align = "h")
+
+# ggsave(file=file.path(comp_figs_dir, "FigureS7_BactDateEstimatesSpn.png"), 
+#        plot=SP_bd_plots, width=12, height=4, bg = 'white')
+# ggsave(file=file.path(comp_figs_dir, "FigureS7_BactDateEstimatesSpn.tif"), 
+#        plot=SP_bd_plots, width=12, height=4, bg = 'white')
+
+
+SP_bd_plots_with_performance <- (
+    wrap_elements(SP_bd_mu_plot | SP_bd_mrca_plot) + 
+        ggtitle("(A) *Streptococcus pneumoniae* PMEN1 dataset") | 
+    wrap_elements(runs_that_coverged | performance_summary_plot) + 
+        ggtitle("(B) *Klebsiella pneumoniae* sublineages dataset (n = 83)")
+    ) + 
+    plot_layout(nrow=2, heights = c(1,1.3)) &
+    theme(plot.title = ggtext::element_markdown(face="bold",size=14))
+ggsave(file=file.path(comp_figs_dir, "Figure7_BactDatePerformanceSpnKpn.png"), 
+       plot=SP_bd_plots_with_performance, width=12, height=10, bg = 'white')
+ggsave(file=file.path(comp_figs_dir, "Figure7_BactDatePerformanceSpnKpn.tif"), 
+       plot=SP_bd_plots_with_performance, width=12, height=10, bg = 'white')
+```
+
+
+```{r}
+# Convert previous estimates of mutation rate (in subs per site per year) to substitutions per year
+
+# 1) ST307 Wyres et al. 2019 doi:10.1093/jac/dky492
+#       1.18 × 10−6 [95% HPD: 8.01×10-7 – 1.58×10-6 substitutions/site/year
+genome_size_307 <- selected_clones_data %>% filter(ST == "ST307") %>% pull(total_size) %>% mean()
+do.call(sprintf, c("Published rate ST307: %.1f [%.1f - %.1f]", as.list(genome_size_307 * c(1.18*10^-6, 8.01*10^-7, 1.58*10^-6))))
+kp_bd_results_long %>% filter(Sublineage == "SL307") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+
+# 2) ST258 Bowers et al. 2015 doi:10.1371/journal.pone.0133727
+#       1.03 x 10−6 (95% HPD: 8.09 x 10−7 to 1.24 x 10−6) substitutions/site/year
+genome_size_258 <- selected_clones_data %>% filter(ST == "ST258") %>% pull(total_size) %>% mean()
+do.call(sprintf, c("Published rate ST258: %.1f [%.1f - %.1f]", as.list(genome_size_258 * c(1.03*10^-6, 8.09*10^-7, 1.24*10^-6))))
+kp_bd_results_long %>% filter(Sublineage == "SL258_and_395") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+# 3) ST17 Hetland et al. doi:10.1099/mgen.0.001005
+#       4.04×10−7 (95% HPD 2.30×10−7 to 5.79×10−7) substitutions/site/year  equivalent to 2.17 SNPs per year
+genome_size_17 <- selected_clones_data %>% filter(Sublineage == "17") %>% pull(total_size) %>% mean()
+do.call(sprintf, c("Published rate ST17: %.1f [%.1f - %.1f]", as.list(genome_size_17 * c(4.04*10^-7, 2.30*10^-7, 5.79*10^-7))))
+kp_bd_results_long %>% filter(Sublineage == "SL17") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+# 4) CG147 Carla Rodrigues et al. doi:10.1099/mgen.0.000737
+#       1.45×10−6 [95% HPD 1.12x10−6 – 1.78×10−6] substitutions/site/year equivalent to 6.2 SNPs per year
+genome_size_147 <- 5646384 # mean of genome sizes in suppl material 2
+do.call(sprintf, c("Published rate CG147: %.1f [%.1f - %.1f]", as.list(genome_size_147 * c(1.45*10^-6, 1.12*10^-6, 1.78*10^-6))))
+kp_bd_results_long %>% filter(Sublineage == "SL147") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+# 5) CG23 Lam et al. doi:10.1038/s41467-018-05114-7
+#       3.40×10−7 (95% HPD; 2.43×10−7 – 4.38×10−7) substitutions/site/year 
+genome_size_23 <- selected_clones_data %>% filter(Sublineage == "23") %>% pull(total_size) %>% mean()
+do.call(sprintf, c("Published rate CG23: %.1f [%.1f - %.1f]", as.list(genome_size_147 * c(3.40*10^-7, 2.43*10^-7, 4.38*10^-7))))
+kp_bd_results_long %>% filter(Sublineage == "SL23") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+# 5) ST14/15  
+kp_bd_results_long %>% filter(Sublineage == "SL14_and_15") %>% 
+    mutate(muest = sprintf("%.1f [%.1f - %.1f]", mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, muest)
+
+
+# mutation rates within published ranges for K. pneumo
+mu_within_pub_range <- kp_bd_results_long %>% 
+    mutate(mu_within_range = if_else(is.na(mu), NA_character_, 
+                                     if_else(mu >= 1.3 & mu <= 10.0, "Yes", "No"))) %>% 
+    select(Sublineage, method, mu, mu_within_range)
+
+mu_within_pub_range %>% 
+    pivot_wider(id_cols = Sublineage, names_from = method, values_from = mu_within_range) %>% 
+    reframe(VA_within = sum(VA=="Yes", na.rm=T), VA_n = sum(!is.na(VA)),
+            VD_within = sum(VD=="Yes", na.rm=T), VD_n = sum(!is.na(VD)),
+            GB_within = sum(GB=="Yes", na.rm=T), GB_n = sum(!is.na(GB))) %>% 
+    mutate(VA = sprintf("%.1f%% (n = %d/%d)", VA_within / VA_n * 100, VA_within, VA_n),
+           VD = sprintf("%.1f%% (n = %d/%d)", VD_within / VD_n * 100, VD_within, VD_n),
+           GB = sprintf("%.1f%% (n = %d/%d)", GB_within / GB_n * 100, GB_within, GB_n)) %>% 
+    select(VA, VD, GB)
+
+kp_bd_results_long %>% 
+    filter(Sublineage %in% mu_within_pub_range$Sublineage[mu_within_pub_range$mu_within_range == "No"]) %>% 
+    mutate(rep = sprintf("%s: %.1f [%.1f-%.1f] substitutions/year", method, mu, mu_lower, mu_upper)) %>% 
+    select(Sublineage, method, mu, rep) # %>% view()
+```
+

@@ -1,0 +1,876 @@
+---
+title: "Assess trees"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r pre}
+library(tidyverse)
+library(magrittr)
+library(readxl)
+library(ape)
+library(adephylo)
+library(BactDating)
+library(ggpubr)
+library(ggtree)
+library(patchwork)
+library(cowplot)
+
+packageVersion("tidyverse")
+packageVersion("readxl")
+packageVersion("ape")
+packageVersion("adephylo")
+packageVersion("BactDating")
+packageVersion("ggpubr")
+packageVersion("ggtree")
+packageVersion("patchwork")
+packageVersion("cowplot")
+
+main_dir <- fs::path_real("../")
+
+source(file.path(main_dir,"misc_functions.R"))
+
+# Generated figures
+verticall_figs_dir <- file.path(main_dir, "figures/")
+fs::dir_create(verticall_figs_dir)
+
+wf_names <- c("si" = "Unfiltered, alignment-based", 
+              "ff" = "Unfiltered, distance-based", 
+              "sgi" = "Gubbins",
+              "sci" = "ClonalFrameML", 
+              "svi" = "Verticall alignment", 
+              "vpf" = "Verticall distance")
+
+# for verticall pairwise recombination blocks, only show blocks rel to ≥2 other genomes
+vpf_rec_min_pairs <- 1 
+
+```
+
+
+## S_pneumo_PMEN1
+```{r S_pneumo_PMEN1, warning=F}
+SP_data_dir <- file.path(main_dir, "data/dataset_1__S_pneumo_PMEN1/")
+SP_df <- readxl::read_xlsx(file.path(SP_data_dir, "genome_data_sp.xlsx"), skip = 1) %>% 
+    rename("id" = "BioSample accession")
+SP_dates <- SP_df %>% 
+    select(id, Year) %>%
+    mutate(Year = as.numeric(Year))
+
+# trees and dates (ordered by tip labels)
+SP_tree_si <- read.tree(file.path(SP_data_dir, "snippy_iqtree.newick"))
+SP_tree_si$edge.length <- SP_tree_si$edge.length * 22389 # core aln length
+SP_dates_si <- data.frame(id = SP_tree_si$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+SP_tree_sci <- read.tree(file.path(SP_data_dir, "snippy_clonalframeml_iqtree.newick"))
+SP_tree_sci$edge.length <- SP_tree_sci$edge.length * 3939
+SP_dates_sci <- data.frame(id = SP_tree_sci$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+SP_tree_sgi <- read.tree(file.path(SP_data_dir, "snippy_gubbins_iqtree.newick"))
+SP_tree_sgi$edge.length <- SP_tree_sgi$edge.length * 3404
+SP_dates_sgi <- data.frame(id = SP_tree_sgi$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+SP_tree_svi <- read.tree(file.path(SP_data_dir, "snippy_verticall_iqtree.newick"))
+SP_tree_svi$edge.length <- SP_tree_svi$edge.length * 9393
+SP_dates_svi <- data.frame(id = SP_tree_svi$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+SP_tree_ff <- read.tree(file.path(SP_data_dir, "fastani_fastme.newick"))
+SP_avg_g_len <- SP_df %>% filter(id %in% SP_tree_ff$tip.label) %>%
+    pull(Size) %>% mean(na.rm = T)
+SP_tree_ff$edge.length <- SP_tree_ff$edge.length * SP_avg_g_len
+SP_dates_ff <- data.frame(id = SP_tree_ff$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+SP_tree_vpf <- read.tree(file.path(SP_data_dir, "verticall_pairwise_fastme.newick"))
+SP_tree_vpf$edge.length <- SP_tree_vpf$edge.length * SP_avg_g_len
+SP_dates_vpf <- data.frame(id = SP_tree_vpf$tip.label) %>% as_tibble() %>% 
+    left_join(SP_dates, by = c("id")) %>% deframe()
+
+###################################
+# Root-to-tip distance regression
+###################################
+{ SP_rtt_si <- my_roottotip(SP_tree_si, SP_dates_si); SP_rttPlot_si <- recordPlot() }
+{ SP_rtt_sci <- my_roottotip(SP_tree_sci, SP_dates_sci); SP_rttPlot_sci <- recordPlot() }
+{ SP_rtt_sgi <- my_roottotip(SP_tree_sgi, SP_dates_sgi); SP_rttPlot_sgi <- recordPlot() }
+{ SP_rtt_svi <- my_roottotip(SP_tree_svi, SP_dates_svi); SP_rttPlot_svi <- recordPlot() }
+{ SP_rtt_ff <- my_roottotip(SP_tree_ff, SP_dates_ff); SP_rttPlot_ff <- recordPlot() }
+{ SP_rtt_vpf <- my_roottotip(SP_tree_vpf, SP_dates_vpf); SP_rttPlot_vpf <- recordPlot() }
+
+SP_plots_full <- ggarrange(
+    ggarrange(
+        plotlist = list(SP_rttPlot_si, NULL, SP_rttPlot_ff),
+        widths = c(1,0.3,1), nrow = 1, ncol = 3, hjust = -0.1, vjust=1.1,
+        labels=c(paste("(A)", wf_names["si"]), "", paste("(B)", wf_names["ff"]))),
+    NULL,
+    ggarrange(
+        plotlist = list(SP_rttPlot_sgi, NULL, SP_rttPlot_sci),
+        widths = c(1,0.3,1), nrow = 1, ncol = 3, hjust = -0.1, vjust=1.1,
+        labels=c(paste("(C)", wf_names["sgi"]), "", paste("(D)", wf_names["sci"]))),
+    NULL,
+    ggarrange(
+        plotlist = list(SP_rttPlot_svi, NULL, SP_rttPlot_vpf),
+        widths = c(1,0.3,1), nrow = 1, ncol = 3, hjust = -0.1, vjust=1.1,
+        labels=c(paste("(E)", wf_names["svi"]), "", paste("(F)", wf_names["vpf"]))),
+    nrow=5, ncol=1, heights = c(1,0.25,1,0.25,1)
+)
+ggsave(file.path(verticall_figs_dir,"FigureS5_SpneumoRTT.png"), 
+       width=12, height=10, plot=SP_plots_full, create.dir = T)
+ggsave(file.path(verticall_figs_dir,"FigureS5_SpneumoRTT.tif"), 
+       width=12, height=10, plot=SP_plots_full)
+
+###################################
+# Recombination maps
+###################################
+# Figure out which clades to highlight based on gubbins tree 
+plot(SP_tree_sgi,no.margin=TRUE,edge.width=2,cex=0.5)
+ape::nodelabels(text=1:SP_tree_sgi$Nnode,
+                node=1:SP_tree_sgi$Nnode+ape::Ntip(SP_tree_sgi),
+                frame="none",adj=c(1.1,-0.4), cex=0.6)
+SP_nodes_to_highlight <- c(21, 126, 97, 65) # node indices from plot above, not absolute node numbers
+SP_sgi_nodes_hl <- tibble(
+    node_in_first_tree = SP_nodes_to_highlight, 
+    node_in_other_tree = SP_nodes_to_highlight + ape::Ntip(SP_tree_sgi)
+) 
+SP_svi_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_svi)
+SP_sci_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_sci)
+SP_vpf_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_vpf)
+SP_si_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_si)
+SP_ff_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_ff)
+
+# unfiltered trees (only plot tree with highlighted clades, no rec to plot)
+SP_map_si <- plot_rec_map(
+    SP_tree_si, node_highlight_df=SP_si_nodes_hl, tree_scale=50,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_si$r2),
+                              "; PHI p=0; Chi" ^ "2", " p=0")))
+SP_map_ff <- plot_rec_map(
+    SP_tree_ff, node_highlight_df=SP_ff_nodes_hl, tree_scale=150,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_ff$r2))))
+
+# verticall reference -------------------
+SP_svi_tsv_file <- file.path(SP_data_dir, "verticall_reference/verticall_reference.tsv")
+SP_svi_rec_parsed <- parse_verticall_ref_rec(
+    SP_svi_tsv_file, SP_tree_svi, node_highlight_df=SP_svi_nodes_hl, tree_scale=50,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_svi$r2),
+                              "; PHI p=0; Chi" ^ "2", " p=0")))
+SP_map_svi <- SP_svi_rec_parsed$rec_plot
+SP_svi_rec <- SP_svi_rec_parsed$rec
+summarise_recs(SP_svi_rec)
+
+# cfml -------------------
+SP_sci_prefix <- file.path(SP_data_dir, "clonalframeml/clonalframeml")
+SP_sci_rec_parsed <- parse_cfml_rec(
+    SP_sci_prefix, SP_tree_sci, node_highlight_df=SP_sci_nodes_hl, tree_scale=2,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_sci$r2),
+                              "; PHI p=0.031; Chi" ^ "2", " p=0.023")))
+SP_map_sci <- SP_sci_rec_parsed$rec_plot
+SP_sci_rec <- SP_sci_rec_parsed$rec
+summarise_recs(SP_sci_rec)
+
+# gubbins  -------------------
+SP_sgi_prefix <- file.path(SP_data_dir, "gubbins/gubbins")
+SP_sgi_rec_parsed <- parse_gubbins_rec(
+    SP_sgi_prefix, SP_tree_sgi, node_highlight_df=SP_sgi_nodes_hl, tree_scale=1,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_sgi$r2),
+                              "; PHI p=0.27; Chi" ^ "2", " p=0.058")))
+SP_map_sgi <- SP_sgi_rec_parsed$rec_plot
+SP_sgi_rec <- SP_sgi_rec_parsed$rec
+summarise_recs(SP_sgi_rec)
+
+# verticall pairwise -------------------
+SP_vpf_pairwise_tsv_df <- read_tsv(
+    file.path(SP_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+SP_vpf_ref_to_contig_pos_df <- read_tsv(
+    file.path(SP_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
+SP_vpf_rec_parsed <- parse_verticall_pairwise_rec(SP_vpf_pairwise_tsv_df, SP_vpf_ref_to_contig_pos_df) 
+SP_vpf_rec_all <- SP_vpf_rec_parsed$all_rec
+SP_vpf_rec <- SP_vpf_rec_parsed$merged_rec
+
+# summary
+summarise_recs(SP_vpf_rec)
+SP_vpf_rec %>% 
+    reframe(total = sum(n_merged_ranges), 
+            after_merged = n(), 
+            after_merged_no_ref_pos = sum(is.na(Beg)))
+
+# plot
+SP_map_vpf <- plot_verticall_pw_map(
+    SP_vpf_rec, SP_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
+    node_highlight_df=SP_vpf_nodes_hl, tree_scale=20,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_vpf$r2))))
+
+# combine plots ###################################
+# SP_maps <- cowplot::plot_grid(
+#     SP_map_svi, SP_map_sci, SP_map_sgi, SP_map_vpf,
+#     labels = c(paste("(A)", wf_names["svi"]),
+#               paste("(B)", wf_names["sci"]),
+#               paste("(C)", wf_names["sgi"]),
+#               paste("(D)", wf_names["vpf"])),
+#     rel_heights=c(1.1, 1.25, 1.25, 1.3), ncol=1, 
+#     label_fontface="bold", label_size=16, hjust=0, label_x=0.01)
+# ggsave(file.path(verticall_figs_dir,"FigureSX_Spneumo_RecombinationMaps.png"),
+#        width=11, height=14, plot=SP_maps, bg="white")
+
+SP_maps_with_unfiltered <- 
+    ( annotate_figure(SP_map_svi, fig.lab=paste("(A)", wf_names["svi"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SP_map_sci, fig.lab=paste("(B)", wf_names["sci"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SP_map_sgi, fig.lab=paste("(C)", wf_names["sgi"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SP_map_vpf, fig.lab=paste("(D)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SP_map_si, fig.lab=paste("(E)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SP_map_ff, fig.lab=paste("(F)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
+    ) +
+    plot_layout(design = c(area(1,1,11,8), area(12,1,24,8), area(25,1,37,8), 
+                           area(38,1,51,8), area(52,1,61,3), area(52,5,61,7))) +
+    theme(plot.tag = element_text(size=16, face="bold"))
+ggsave(file.path(verticall_figs_dir,"Figure3_Spneumo_RecombinationMaps.svg"), 
+       width=11, height=16, plot=SP_maps_with_unfiltered, bg="white")
+
+
+
+
+###################################
+# Compare tree topologes
+###################################
+# Compare to Gubbins as reference method for this within clone dataset
+
+# Example clades with differences
+# Clade 134 in SP gubbins tree is not resolved by VPf (see initial nodes plot above)
+SP_diff_node_134 <- 134 + Ntip(SP_tree_sgi) # Node 134 (absolute node = 134+154 = 288)
+SP_diff_tips_134 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_134)$tip.label
+# Clade 112 in SP gubbins tree
+SP_diff_node_112 <- 112 + Ntip(SP_tree_sgi) 
+SP_diff_tips_112 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_112)$tip.label
+
+SP_df %<>% mutate(tips_colours = case_when(
+    id %in% SP_diff_tips_134 ~ "red",
+    id %in% SP_diff_tips_112 ~ "blue",
+    TRUE ~ "black"
+))
+
+svg(file.path(verticall_figs_dir, "FigureS2_SPTrees_GUBvsVP.svg"), 
+    width = 10, height = 15)
+make_tanglegram(SP_tree_sgi, SP_tree_vpf,
+                title1=wf_names["sgi"], title2=wf_names["vpf"],
+                color_by_var=T, color_df=SP_df, id_column="id", color_column="tips_colours",
+                named_var_colors = setNames(unique(SP_df$tips_colours), unique(SP_df$tips_colours)), 
+                color_branches = T, color_labels = T,
+                edge.lwd = 1.5, lwd = 2, lab.cex=0.8, cex_main = 2)
+dev.off()
+
+
+# SP_trees <- list(SP_tree_si, SP_tree_sci, SP_tree_sgi, SP_tree_svi, SP_tree_ff, SP_tree_vpf)
+# names(SP_trees) <- wf_names[c('si', 'sci', 'sgi', 'svi', 'ff', 'vpf')]
+
+SP_trees <- list(SP_tree_sci, SP_tree_sgi, SP_tree_svi, SP_tree_vpf) # only recomb trees
+names(SP_trees) <- wf_names[c('sci', 'sgi', 'svi', 'vpf')]
+class(SP_trees) <- "multiPhylo"
+# weighted RF distance
+phangorn::wRF.dist(SP_trees, normalize = T, rooted = T)
+# clustering information distance
+TreeDist::ClusteringInfoDistance(SP_trees, normalize = T)
+
+
+###################################
+# Variance of root-to-tip distances
+###################################
+SP_dist_si <- distRoot(SP_tree_si, tips = "all", method = c("patristic"))
+SP_dist_sci <- distRoot(SP_tree_sci, tips = "all", method = c("patristic"))
+SP_dist_sgi <- distRoot(SP_tree_sgi, tips = "all", method = c("patristic"))
+SP_dist_svi <- distRoot(SP_tree_svi, tips = "all", method = c("patristic"))
+SP_dist_ff <- distRoot(SP_tree_ff, tips = "all", method = c("patristic"))
+SP_dist_vpf <- distRoot(SP_tree_vpf, tips = "all", method = c("patristic"))
+
+SP_rtt_variance <- data.frame(
+    method = c("si", "sci", "sgi", "svi", "ff", "vpf"),
+    variance = c(
+        sd(SP_dist_si)/mean(SP_dist_si), sd(SP_dist_sci)/mean(SP_dist_sci),
+        sd(SP_dist_sgi)/mean(SP_dist_sgi), sd(SP_dist_svi)/mean(SP_dist_svi),
+        sd(SP_dist_ff)/mean(SP_dist_ff), sd(SP_dist_vpf)/mean(SP_dist_vpf))
+    ) %>% as_tibble() %>% arrange(variance)
+SP_rtt_variance
+```
+
+
+
+## S_enterica_Typhi_431
+```{r S_enterica_Typhi_431, warning=F}
+SET_data_dir <- file.path(main_dir, "data/dataset_2__S_enterica_Typhi_431/")
+SET_df <- readxl::read_xlsx(file.path(SET_data_dir, "genome_data_se.xlsx"), skip = 1) %>% 
+    rename("id" = "BioSample accession")
+SET_dates <- SET_df %>% 
+    select(id, Year) %>%
+    mutate(Year = as.numeric(Year))
+
+# trees
+SET_tree_si <- read.tree(file.path(SET_data_dir, "snippy_iqtree.newick"))
+SET_tree_si$edge.length <- SET_tree_si$edge.length * 10369 # core aln length
+SET_dates_si <- data.frame(id = SET_tree_si$tip.label) %>% as_tibble() %>% 
+    left_join(SET_dates, by = c("id")) %>% deframe()
+# all(SET_tree_si$tip.label %in% names(SET_dates_si)) # sanity
+
+SET_tree_sgi <- read.tree(file.path(SET_data_dir, "snippy_gubbins_iqtree.newick"))
+SET_tree_sgi$edge.length <- SET_tree_sgi$edge.length * 10191
+SET_dates_sgi <- data.frame(id = SET_tree_sgi$tip.label) %>% as_tibble() %>% 
+    left_join(SET_dates, by = c("id")) %>% deframe()
+
+SET_tree_svi <- read.tree(file.path(SET_data_dir, "snippy_verticall_iqtree.newick"))
+SET_tree_svi$edge.length <- SET_tree_svi$edge.length * 9966
+SET_dates_svi <- data.frame(id = SET_tree_svi$tip.label) %>% as_tibble() %>% 
+    left_join(SET_dates, by = c("id")) %>% deframe()
+
+SET_tree_ff <- read.tree(file.path(SET_data_dir, "fastani_fastme.newick"))
+SET_avg_g_len <- SET_df %>% filter(id %in% SET_tree_ff$tip.label) %>%
+    pull(Size) %>% mean(na.rm = T)
+SET_tree_ff$edge.length <- SET_tree_ff$edge.length * SET_avg_g_len
+SET_dates_ff <- data.frame(id = SET_tree_ff$tip.label) %>% as_tibble() %>% 
+    left_join(SET_dates, by = c("id")) %>% deframe()
+
+###################################
+# Root-to-tip distance regression
+###################################
+{ SET_rtt_si <- my_roottotip(SET_tree_si, SET_dates_si); SET_rttPlot_si <- recordPlot() }
+{ SET_rtt_sgi <- my_roottotip(SET_tree_sgi, SET_dates_sgi); SET_rttPlot_sgi <- recordPlot() }
+{ SET_rtt_svi <- my_roottotip(SET_tree_svi, SET_dates_svi); SET_rttPlot_svi <- recordPlot() }
+{ SET_rtt_ff <- my_roottotip(SET_tree_ff, SET_dates_ff); SET_rttPlot_ff <- recordPlot() }
+
+SET_plots_full <- ggarrange(
+    ggarrange(
+        plotlist = list(SET_rttPlot_si, NULL, SET_rttPlot_ff),
+        widths = c(1,0.25,1), nrow = 1, ncol = 3, hjust = -0.1,
+        labels=c(paste("(A)", wf_names["si"]), "", paste("(B)", wf_names["ff"]))),
+    NULL,
+    ggarrange(
+        plotlist = list(SET_rttPlot_svi, NULL, SET_rttPlot_sgi),
+        widths = c(1,0.25,1), nrow = 1, ncol = 3, hjust = -0.1,
+        labels=c(paste("(C)", wf_names["svi"]), "", paste("(D)", wf_names["sgi"]))),
+    nrow=3, ncol=1, heights = c(1,0.25,1)
+)
+ggsave(file.path(verticall_figs_dir,"FigureS6_SentericaRTT.png"),
+       width=12, height=7, plot=SET_plots_full)
+ggsave(file.path(verticall_figs_dir,"FigureS6_SentericaRTT.tif"),
+       width=12, height=7, plot=SET_plots_full)
+
+
+###################################
+# Recombination maps
+###################################
+# Figure out which clades to highlight based on gubbins tree 
+plot(SET_tree_sgi,no.margin=TRUE,edge.width=2,cex=0.5)
+ape::nodelabels(text=1:SET_tree_sgi$Nnode,
+                node=1:SET_tree_sgi$Nnode+ape::Ntip(SET_tree_sgi),
+                frame="none",adj=c(1.1,-0.4), cex=0.6)
+SET_nodes_to_highlight <- c(280, 2211, 3352) # node indices from plot above, not absolute node numbers
+SET_sgi_nodes_hl <- tibble(
+    node_in_first_tree = SET_nodes_to_highlight, 
+    node_in_other_tree = SET_nodes_to_highlight + ape::Ntip(SET_tree_sgi)
+) 
+SET_svi_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_svi)
+SET_si_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_si)
+SET_ff_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_ff)
+
+SET_node_colors <- unname(Polychrome::light.colors(n=nrow(SET_sgi_nodes_hl)))
+
+# unfiltered trees (only plot tree with highlighted clades, no rec to plot)
+SET_map_si <- plot_rec_map(
+    SET_tree_si, node_highlight_df=SET_si_nodes_hl, 
+    node_highlight_color=SET_node_colors,  tree_scale=5,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_si$r2))))
+SET_map_ff <- plot_rec_map(
+    SET_tree_ff, node_highlight_df=SET_ff_nodes_hl,
+    node_highlight_color=SET_node_colors, highlight_alpha = 0.5, tree_scale=50,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_ff$r2))))
+
+# gubbins
+SET_dir_sgi <- file.path(SET_data_dir, "gubbins/")
+SET_sgi_rec_parsed <- parse_gubbins_rec(
+    paste0(SET_dir_sgi,"/gubbins"), alt_tree_for_plot = SET_tree_sgi,
+    node_highlight_df=SET_sgi_nodes_hl, node_highlight_color=SET_node_colors, tree_scale=5,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SET_rtt_sgi$r2))))
+SET_map_sgi <- SET_sgi_rec_parsed$rec_plot
+SET_sgi_rec <- SET_sgi_rec_parsed$rec
+summarise_recs(SET_sgi_rec)
+
+
+# verticall reference
+SET_dir_svi <- file.path(SET_data_dir, "verticall_reference/")
+SET_svi_rec_parsed <- parse_verticall_ref_rec(
+    file.path(SET_dir_svi,"verticall_reference.tsv"), SET_tree_svi,
+    node_highlight_df=SET_svi_nodes_hl, node_highlight_color=SET_node_colors, tree_scale=5,
+    plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SET_rtt_svi$r2))))
+SET_map_svi <- SET_svi_rec_parsed$rec_plot
+SET_svi_rec <- SET_svi_rec_parsed$rec
+summarise_recs(SET_svi_rec)
+
+# Combine plots ###################################
+
+# SET_maps <- ggarrange(SET_map_sgi, SET_map_svi, ncol=1)
+# ggsave(file.path(verticall_figs_dir,"FigureSX_Senterica_RecombinationMaps.png"), 
+#        width=8, height=7, plot=SET_maps, bg="white")
+
+SET_maps_with_unfiltered <- 
+    ( annotate_figure(SET_map_sgi, fig.lab=paste("(A)", wf_names["sgi"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SET_map_svi, fig.lab=paste("(B)", wf_names["svi"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SET_map_si, fig.lab=paste("(C)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(SET_map_ff, fig.lab=paste("(D)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
+    ) +
+    plot_layout(design = c(area(1,1,10,8), area(11,1,20,8),
+                           area(21,1,30,3), area(21,5,30,7))) +
+    theme(plot.tag = element_text(size=16, face="bold"))
+ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.svg"), 
+       width=8, height=10, plot=SET_maps_with_unfiltered, bg="white")
+
+
+# plot_rec_map(tree = SET_tree_sgi, recomb_df = SET_sgi_rec %>% filter(Beg == 3053778))
+
+###################################
+# Variance of root-to-tip distances
+###################################
+SET_dist_si <- distRoot(SET_tree_si, tips = "all", method = c("patristic"))
+SET_dist_sgi <- distRoot(SET_tree_sgi, tips = "all", method = c("patristic"))
+SET_dist_svi <- distRoot(SET_tree_svi, tips = "all", method = c("patristic"))
+SET_dist_ff <- distRoot(SET_tree_ff, tips = "all", method = c("patristic"))
+
+SET_rtt_variance <- data.frame(
+    method = c("si", "sgi", "svi", "ff"),
+    variance = c(
+        sd(SET_dist_si) / mean(SET_dist_si), sd(SET_dist_sgi) / mean(SET_dist_sgi), 
+        sd(SET_dist_svi) / mean(SET_dist_svi), sd(SET_dist_ff) / mean(SET_dist_ff))
+    ) %>% as_tibble() %>% arrange(variance)
+SET_rtt_variance
+```
+
+
+
+
+## E_coli_GEMS
+```{r E_coli_GEMS, warning=FALSE}
+ECG_data_dir <- file.path(main_dir, "data/dataset_3__E_coli_GEMS")
+
+ECG_df <- readxl::read_xlsx(file.path(ECG_data_dir, "genome_data_ec.xlsx"), skip = 1) %>% 
+    rename("id" = "BioSample accession") %>% 
+    mutate(CG = if_else(grepl("^CG", `Clone Cluster`), `Clone Cluster`, NA_character_))
+
+ECG_CGs <- sort(unique(ECG_df$CG[!is.na(ECG_df$CG)]))
+ECG_CG_colors <- setNames(
+    unname(Polychrome::glasbey.colors(n=length(ECG_CGs)+1)[-1]), ECG_CGs)
+
+# trees
+ECG_tree_si <- read.tree(file.path(ECG_data_dir, "snippy_iqtree.newick"))
+ECG_tree_si$edge.length <- ECG_tree_si$edge.length * 280234 # core aln length
+
+ECG_tree_sci <- read.tree(file.path(ECG_data_dir, "snippy_clonalframeml_iqtree.newick"))
+ECG_tree_sci$edge.length <- ECG_tree_sci$edge.length * 18724
+
+ECG_tree_sgi <- read.tree(file.path(ECG_data_dir, "snippy_gubbins_iqtree.newick"))
+ECG_tree_sgi$edge.length <- ECG_tree_sgi$edge.length * 50965
+
+ECG_tree_svi <- read.tree(file.path(ECG_data_dir, "snippy_verticall_iqtree.newick"))
+ECG_tree_svi$edge.length <- ECG_tree_svi$edge.length * 185906
+
+ECG_tree_ff <- read.tree(file.path(ECG_data_dir, "fastani_fastme.newick"))
+ECG_avg_g_len <- ECG_df %>% filter(id %in% ECG_tree_ff$tip.label) %>%
+    pull(Size) %>% mean(na.rm = T)
+ECG_tree_ff$edge.length <- ECG_tree_ff$edge.length * ECG_avg_g_len
+
+ECG_tree_vpf <- read.tree(file.path(ECG_data_dir, "verticall_pairwise_fastme.newick"))
+ECG_tree_vpf$edge.length <- ECG_tree_vpf$edge.length * ECG_avg_g_len
+
+###################################
+# Variance of root-to-tip distances
+###################################
+ECG_dist_si <- distRoot(ECG_tree_si, tips = "all", method = c("patristic"))
+ECG_dist_sci <- distRoot(ECG_tree_sci, tips = "all", method = c("patristic"))
+ECG_dist_sgi <- distRoot(ECG_tree_sgi, tips = "all", method = c("patristic"))
+ECG_dist_svi <- distRoot(ECG_tree_svi, tips = "all", method = c("patristic"))
+ECG_dist_ff <- distRoot(ECG_tree_ff, tips = "all", method = c("patristic"))
+ECG_dist_vpf <- distRoot(ECG_tree_vpf, tips = "all", method = c("patristic"))
+
+ECG_rtt_variance <- data.frame(
+    method = c("si", "sci", "sgi", "svi", "ff", "vpf"),
+    variance = c(
+        sd(ECG_dist_si) / mean(ECG_dist_si), sd(ECG_dist_sci) / mean(ECG_dist_sci),
+        sd(ECG_dist_sgi) / mean(ECG_dist_sgi), sd(ECG_dist_svi) / mean(ECG_dist_svi),
+        sd(ECG_dist_ff) / mean(ECG_dist_ff), sd(ECG_dist_vpf) / mean(ECG_dist_vpf))
+) %>% as_tibble() %>% arrange(variance)
+ECG_rtt_variance %<>% mutate(variance = round(variance,3)) 
+
+
+###################################
+# Recombination maps
+###################################
+# Highlight CG clades
+
+ECG_si_nodes_hl <- get_group_mrca(ECG_tree_si, ECG_df, "CG", "id")
+ECG_ff_nodes_hl <- get_group_mrca(ECG_tree_ff, ECG_df, "CG", "id")
+ECG_sgi_nodes_hl <- get_group_mrca(ECG_tree_sgi, ECG_df, "CG", "id")
+ECG_svi_nodes_hl <- get_group_mrca(ECG_tree_svi, ECG_df, "CG", "id")
+ECG_sci_nodes_hl <- get_group_mrca(ECG_tree_sci, ECG_df, "CG", "id")
+ECG_vpf_nodes_hl <- get_group_mrca(ECG_tree_vpf, ECG_df, "CG", "id")
+
+# unfiltered trees -------------------
+ECG_map_si <- plot_rec_map(
+    ECG_tree_si, node_highlight_df=ECG_si_nodes_hl,
+    node_highlight_color=ECG_CG_colors, tree_scale=10,
+    plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="si",2]))
+ECG_map_ff <- plot_rec_map(
+    ECG_tree_ff, node_highlight_df=ECG_ff_nodes_hl,
+    node_highlight_color=ECG_CG_colors, tree_scale=10,
+    plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="ff",2]))
+
+# verticall reference -------------------
+ECG_svi_tsv_file <- file.path(ECG_data_dir, "verticall_reference/verticall_reference.tsv")
+ECG_svi_rec_parsed <- parse_verticall_ref_rec(
+    ECG_svi_tsv_file, ECG_tree_svi, 
+    node_highlight_df=ECG_svi_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=5000,
+    plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="svi",2]))
+ECG_map_svi <- ECG_svi_rec_parsed$rec_plot
+ECG_svi_rec <- ECG_svi_rec_parsed$rec
+summarise_recs(ECG_svi_rec)
+
+# cfml -------------------
+ECG_sci_prefix <- file.path(ECG_data_dir, "clonalframeml/clonalframeml")
+ECG_sci_rec_parsed <- parse_cfml_rec(
+    ECG_sci_prefix, ECG_tree_sci, 
+    node_highlight_df=ECG_sci_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=100,
+    plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sci",2]))
+ECG_map_sci <- ECG_sci_rec_parsed$rec_plot
+ECG_sci_rec <- ECG_sci_rec_parsed$rec
+summarise_recs(ECG_sci_rec)
+
+# gubbins  -------------------
+ECG_sgi_prefix <- file.path(ECG_data_dir, "gubbins/gubbins")
+ECG_sgi_rec_parsed <- parse_gubbins_rec(
+    ECG_sgi_prefix, ECG_tree_sgi, 
+    node_highlight_df=ECG_sgi_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=500,
+    plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sgi",2]))
+ECG_map_sgi <- ECG_sgi_rec_parsed$rec_plot
+ECG_sgi_rec <- ECG_sgi_rec_parsed$rec
+summarise_recs(ECG_sgi_rec)
+
+# verticall pairwise -------------------
+ECG_vpf_pairwise_tsv_df <- read_tsv(
+    file.path(ECG_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+ECG_vpf_ref_to_contig_pos_df <- read_tsv(
+    file.path(ECG_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
+ECG_vpf_rec_parsed <- parse_verticall_pairwise_rec(ECG_vpf_pairwise_tsv_df, ECG_vpf_ref_to_contig_pos_df) 
+ECG_vpf_rec_all <- ECG_vpf_rec_parsed$all_rec
+ECG_vpf_rec <- ECG_vpf_rec_parsed$merged_rec
+
+# summary
+summarise_recs(ECG_vpf_rec)
+ECG_vpf_rec %>% 
+    reframe(total = sum(n_merged_ranges), 
+            after_merged = n(), 
+            after_merged_no_ref_pos = sum(is.na(Beg)))
+
+# plot
+ECG_map_vpf <- plot_verticall_pw_map(
+    ECG_vpf_rec, ECG_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
+    node_highlight_df=ECG_vpf_nodes_hl, node_highlight_color=ECG_CG_colors,
+    node_highlight_legend=T, tree_scale=5000,
+    plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="vpf",2]))
+
+
+# combine ###################################
+ECG_maps <- cowplot::plot_grid(
+    ECG_map_svi, ECG_map_sci, ECG_map_sgi, ECG_map_vpf,
+    labels = c(paste("(A)", wf_names["svi"]),
+              paste("(B)", wf_names["sci"]),
+              paste("(C)", wf_names["sgi"]),
+              paste("(D)", wf_names["vpf"])),
+    rel_heights=c(1.1, 1.25, 1.25, 1.3), ncol=1, 
+    label_fontface="bold", label_size=16, hjust=0, label_x=0.01)
+ggsave(file.path(verticall_figs_dir,"Figure5_Ecoli_RecombinationMaps.png"),
+       width=11, height=14, plot=ECG_maps, bg="white")
+ggsave(file.path(verticall_figs_dir,"Figure5_Ecoli_RecombinationMaps.tif"),
+       width=11, height=14, plot=ECG_maps, bg="white")
+
+# ECG_maps_with_unfiltered <- 
+#     ( annotate_figure(ECG_map_svi, fig.lab=paste("(A)", wf_names["svi"]), fig.lab.size=14, fig.lab.face="bold") | 
+#       annotate_figure(ECG_map_sci, fig.lab=paste("(B)", wf_names["sci"]), fig.lab.size=14, fig.lab.face="bold") | 
+#       annotate_figure(ECG_map_sgi, fig.lab=paste("(C)", wf_names["sgi"]), fig.lab.size=14, fig.lab.face="bold") | 
+#       annotate_figure(ECG_map_vpf, fig.lab=paste("(D)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
+#       annotate_figure(ECG_map_si, fig.lab=paste("(E)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
+#       annotate_figure(ECG_map_ff, fig.lab=paste("(F)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
+#     ) +
+#     plot_layout(design = c(area(1,1,11,8), area(12,1,24,8), area(25,1,37,8), 
+#                            area(38,1,49,8), area(50,1,59,3), area(50,5,59,7))) +
+#     theme(plot.tag = element_text(size=16, face="bold"))
+# ggsave(file.path(verticall_figs_dir,"FigureSX_Ecoli_RecombinationMaps.png"), 
+#        width=11, height=16, plot=ECG_maps_with_unfiltered, bg="white")
+
+
+###################################
+# Between vs within clonal group distances
+###################################
+get_bw_ratio <- function(tree, df){
+    dist <- as.data.frame(as.table(as.matrix(ape::cophenetic.phylo(tree))))
+    names(dist) <- c("Sample1", "Sample2", "Distance")
+
+    dist %>% 
+        # remove duplicate pairs. i.e row1 = samp1 vs samp2 and row2 = samp2. vs samp1, keep only one row
+        filter( ! Sample1 == Sample2 ) %>% 
+        mutate(Sample1 = as.character(Sample1), Sample2 = as.character(Sample2)) %>% 
+        mutate(L1 = if_else(Sample1 < Sample2, Sample1, Sample2)) %>% 
+        mutate(L2 = if_else(Sample1 > Sample2, Sample1, Sample2)) %>% 
+        mutate(pairs = paste0(L1, "_", L2)) %>% select(-c(L1, L2)) %>% 
+        distinct(pairs, .keep_all = TRUE) %>% 
+        # add CG designation for each sample and check if each pair belongs to the same CG
+        left_join(ECG_df %>% select(id, CG), by = c("Sample1" = "id")) %>% 
+        rename("S1_CG" = "CG") %>% 
+        left_join(ECG_df %>% select(id, CG), by = c("Sample2" = "id")) %>%
+        rename("S2_CG" = "CG") %>% 
+        mutate(pair_CG = if_else(S1_CG == S2_CG, "Within", "Between")) %>% 
+        filter(! is.na(pair_CG)) %>%
+        mutate(pair_CG = factor(pair_CG, levels = c("Within", "Between"))) %>% 
+        mutate(across(c(S1_CG, S2_CG), as.character)) %>% 
+        group_by(pair_CG) %>%
+        summarise(mean_dist = mean(Distance)) %>%
+        summarise(bw_ratio = mean_dist[pair_CG == "Between"] / mean_dist[pair_CG == "Within"]) %>% 
+        pull(bw_ratio) %>% round(1)
+}
+plot_ECG_tree <- function(tree, df, plot_title = "", rtt_variance = NULL){
+    bw_text <- paste0("b/w = ", get_bw_ratio(tree, df))
+    p <- ggtree(tree, layout = "circular") %<+% df +  
+        geom_tippoint(aes(color = CG), size = 2, na.rm = TRUE) +
+        theme(legend.position = "right") +
+        # scale_color_brewer(palette = "Paired", na.value = NA, na.translate = F) +
+        scale_color_manual(values = ECG_CG_colors, na.value = NA, na.translate = F,
+                           guide=guide_legend(override.aes=list(size=4))) +
+        annotate("text", x=0, y=0, label=bw_text, size=4, vjust=2) +
+        labs(title=plot_title, color = "Clonal Group") +
+        theme(legend.title = element_text(size=10), legend.text = element_text(size=8),
+              plot.title = element_text(size=12, face="bold", hjust=0.5, margin=margin(0,0,-15,0)))
+    if(!is.null(rtt_variance)){
+        p <- p + annotate("text", x=0, y=0, size=4, vjust=4, 
+                          label=paste("Variance =", round(rtt_variance, 3)))}
+    p
+}
+
+ECG_tree_plot_si <- plot_ECG_tree(ECG_tree_si, ECG_df, paste("(A)", wf_names["si"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "si",2]) 
+ECG_tree_plot_sgi <- plot_ECG_tree(ECG_tree_sgi, ECG_df, paste("(B)", wf_names["sgi"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "sgi",2]) 
+ECG_tree_plot_svi <- plot_ECG_tree(ECG_tree_svi, ECG_df, paste("(C)", wf_names["svi"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "svi",2]) 
+ECG_tree_plot_ff <- plot_ECG_tree(ECG_tree_ff, ECG_df, paste("(D)", wf_names["ff"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "ff",2]) 
+ECG_tree_plot_sci <- plot_ECG_tree(ECG_tree_sci, ECG_df, paste("(E)", wf_names["sci"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "sci",2]) 
+ECG_tree_plot_vpf <- plot_ECG_tree(ECG_tree_vpf, ECG_df, paste("(F)", wf_names["vpf"]), 
+                                  ECG_rtt_variance[ECG_rtt_variance$method == "vpf",2]) 
+
+# combine all plots
+ECG_tree_plots_full <- ggarrange(
+    plotlist = list(ECG_tree_plot_si, ECG_tree_plot_sgi, ECG_tree_plot_svi,
+                    ECG_tree_plot_ff, ECG_tree_plot_sci, ECG_tree_plot_vpf),
+    common.legend = T, legend = "right")
+ECG_tree_plots_full
+ggsave(file.path(verticall_figs_dir, "Figure6_EcoliTrees.png"), 
+       width=11, height=7, plot=ECG_tree_plots_full, bg = "white")
+ggsave(file.path(verticall_figs_dir, "Figure6_EcoliTrees.tif"), 
+       width=11, height=7, plot=ECG_tree_plots_full, bg = "white")
+
+
+###################################
+# # Compare tree topologes
+###################################
+svg(file.path(verticall_figs_dir, "FigureS3_EcoliTrees_CFMLvsVP.svg"), 
+    width = 10, height = 15)
+make_tanglegram(ECG_tree_sci, ECG_tree_vpf,
+                title1=wf_names["sci"], title2=wf_names["vpf"],
+                line_color = '#1F78B4', color_branches=F,
+                edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 2.5)
+dev.off()
+
+# # # color by clonal group, colour branches
+# make_tanglegram(ECG_tree_sci, ECG_tree_vpf,
+#                 title1=wf_names["sci"], title2=wf_names["vpf"],
+#                 color_by_var=T, color_df=ECG_df, id_column="id", color_column="CG",
+#                 named_var_colors = ECG_CG_colors, color_branches = T,
+#                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 2.5)
+
+
+
+
+# ECG_trees <- list(ECG_tree_si, ECG_tree_sci, ECG_tree_sgi, ECG_tree_svi, ECG_tree_ff, ECG_tree_vpf)
+# class(ECG_trees) <- "multiPhylo"
+# names(ECG_trees) <- wf_names[c('si', 'sci', 'sgi', 'svi', 'ff', 'vpf')]
+# ECG_rf <- treespace::treespace(ECG_trees, method = "RF", nf=3)
+# ECG_rf_pco <- as.data.frame(ECG_rf$pco$li) %>% as_tibble(rownames = "Method")
+# ECG_rf_eig <- round(ECG_rf$pco$eig / sum(ECG_rf$pco$eig) * 100, 1)
+# ECG_rf_mat <- as.matrix(ECG_rf$D)
+# # write_tsv(ECG_rf_mat %>% as_tibble(rownames = "Method"),
+# #           file.path(verticall_figs_dir, "../tables/E_coli_GEMS_RF.tsv"))
+# 
+# # What is the mean RF dist btw all alignment-based-workflow trees
+# idx_aln <- c(1:4) # index of alignment-based workflows
+# idx_dist <- c(5,6) # index of distance-based workflows
+# ECG_rf_aln_based <- ECG_rf_mat[idx_aln, idx_aln]
+# round(c(mean = mean(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)]),
+#   min = min(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)]),
+#   max = max(ECG_rf_aln_based[upper.tri(ECG_rf_aln_based)])),1)
+# 
+# # Plot RF PCo
+# ECG_rf_pco_plot <- ECG_rf_pco %>%
+#     mutate(Method = factor(Method, levels = names(ECG_trees))) %>%
+#     ggplot(aes(x = A1, y = A2, color = Method)) +
+#     geom_point(size = 4) +
+#     # stat_ellipse(type = "norm", alpha = 0.3) +
+#     theme_bw() +
+#     labs(x = glue::glue("PCo1 ({ECG_rf_eig[1]}%)"),
+#          y = glue::glue("PCo2 ({ECG_rf_eig[2]}%)")) +
+#     scale_color_manual(values = RColorBrewer::brewer.pal(n = 8, name = "Set1")[-c(6,7)]) +
+#     coord_equal()
+# ECG_rf_pco_plot
+# # ggsave(file.path(verticall_figs_dir, "E_coli_GEMS_RF_PCoA.png"),
+# #        width=7, height=4, plot=ECG_rf_pco_plot, bg = "white")
+# 
+# # identify clusters of similar trees
+# ECG_rf_groves <- treespace::findGroves(ECG_rf, nclust = 3)
+# treespace::plotGroves(ECG_rf_groves)
+
+```
+
+
+## Klebsiella_Alfred
+```{r Klebsiella_Alfred}
+KA_data_dir <- file.path(main_dir, "data/dataset_4__Klebsiella_Alfred")
+
+KA_df <- readxl::read_xlsx(file.path(KA_data_dir, "genome_data_ka.xlsx"), skip = 1) %>% 
+    rename("id" = "BioSample accession") %>% 
+    mutate(Species = sub("^Klebsiella", "K. ", Species)) %>% 
+    mutate(Species = sub(" subsp ", "\nsubsp ", Species))
+
+
+KA_species <- KA_df %>% count(Species) %>% arrange(desc(n)) %>% pull(Species)
+KA_species_colors <- setNames(RColorBrewer::brewer.pal(length(KA_species), "Set3"), KA_species)
+
+# trees
+KA_tree_si <- read.tree(file.path(KA_data_dir, "snippy_iqtree.newick"))
+KA_tree_si$edge.length <- KA_tree_si$edge.length * 532396 # core aln length
+
+KA_tree_ff <- read.tree(file.path(KA_data_dir, "fastani_fastme.newick"))
+KA_avg_g_len <- KA_df %>% filter(id %in% KA_tree_ff$tip.label) %>%
+    pull(Size) %>% mean(na.rm = T)
+KA_tree_ff$edge.length <- KA_tree_ff$edge.length * KA_avg_g_len
+
+KA_tree_sci <- read.tree(file.path(KA_data_dir, "snippy_clonalframeml_iqtree.newick"))
+KA_tree_sci$edge.length <- KA_tree_sci$edge.length * 159
+
+KA_tree_vpf <- read.tree(file.path(KA_data_dir, "verticall_pairwise_fastme.newick"))
+KA_tree_vpf$edge.length <- KA_tree_vpf$edge.length * KA_avg_g_len
+
+
+###################################
+# Variance of root-to-tip distances
+###################################
+KA_dist_si <- distRoot(KA_tree_si, tips = "all", method = c("patristic"))
+KA_dist_ff <- distRoot(KA_tree_ff, tips = "all", method = c("patristic"))
+KA_dist_sci <- distRoot(KA_tree_sci, tips = "all", method = c("patristic"))
+KA_dist_vpf <- distRoot(KA_tree_vpf, tips = "all", method = c("patristic"))
+
+KA_rtt_variance <- data.frame(
+    method = c("si", "ff", "sci", "vpf"),
+    variance = c(
+        sd(KA_dist_si) / mean(KA_dist_si), sd(KA_dist_ff) / mean(KA_dist_ff), 
+        sd(KA_dist_sci) / mean(KA_dist_sci), sd(KA_dist_vpf) / mean(KA_dist_vpf))
+) %>% as_tibble() %>% arrange(variance)
+KA_rtt_variance %<>% mutate(variance = round(variance,3)) 
+
+###################################
+# Recombination maps
+###################################
+# Highlight CG clades
+KA_si_nodes_hl <- get_group_mrca(KA_tree_si, KA_df, "Species", "id") %>% 
+    mutate(Group = factor(Group, levels = KA_species))
+KA_ff_nodes_hl <- get_group_mrca(KA_tree_ff, KA_df, "Species", "id") %>% 
+    mutate(Group = factor(Group, levels = KA_species))
+KA_sci_nodes_hl <- get_group_mrca(KA_tree_sci, KA_df, "Species", "id")%>% 
+    mutate(Group = factor(Group, levels = KA_species))
+KA_vpf_nodes_hl <- get_group_mrca(KA_tree_vpf, KA_df, "Species", "id")%>% 
+    mutate(Group = factor(Group, levels = KA_species))
+
+# unfiltered trees -------------------
+KA_map_si <- plot_rec_map(
+    KA_tree_si, node_highlight_df=KA_si_nodes_hl,
+    node_highlight_color=KA_species_colors, tree_scale=10000,
+    plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="si",2]))
+KA_map_ff <- plot_rec_map(
+    KA_tree_ff, node_highlight_df=KA_ff_nodes_hl,
+    node_highlight_color=KA_species_colors, node_highlight_legend=T, tree_scale=10000,
+    plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="ff",2])) +
+    guides(fill = guide_legend(override.aes = list(size=5, alpha=1), 
+                               theme = theme(legend.key.spacing.y =  unit(1.5, "mm"))))
+
+# cfml -------------------
+KA_sci_prefix <- file.path(KA_data_dir, "clonalframeml/clonalframeml")
+KA_sci_rec_parsed <- parse_cfml_rec(
+    KA_sci_prefix, KA_tree_sci, node_highlight_df=KA_sci_nodes_hl,
+    node_highlight_color = KA_species_colors, tree_scale=1,
+    plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="sci",2]))
+KA_map_sci <- KA_sci_rec_parsed$rec_plot
+KA_sci_rec <- KA_sci_rec_parsed$rec
+summarise_recs(KA_sci_rec)
+
+# verticall pairwise -------------------
+KA_vpf_pairwise_tsv_df <- read_tsv(
+    file.path(KA_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+KA_vpf_ref_to_contig_pos_df <- read_tsv(
+    file.path(KA_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
+KA_vpf_rec_parsed <- parse_verticall_pairwise_rec(KA_vpf_pairwise_tsv_df, KA_vpf_ref_to_contig_pos_df) 
+KA_vpf_rec_all <- KA_vpf_rec_parsed$all_rec
+KA_vpf_rec <- KA_vpf_rec_parsed$merged_rec
+# summary
+summarise_recs(KA_vpf_rec)
+KA_vpf_rec %>% 
+    reframe(total = sum(n_merged_ranges), 
+            after_merged = n(), 
+            after_merged_no_ref_pos = sum(is.na(Beg)))
+# plot
+KA_map_vpf <- plot_verticall_pw_map(
+    KA_vpf_rec, KA_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
+    node_highlight_df=KA_vpf_nodes_hl, node_highlight_color=KA_species_colors,
+    plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="vpf",2]),
+    plot_color_mode = "n_pairs", tree_scale=20000)
+
+# combine ###################################
+KA_maps_with_unfiltered <- 
+    ( annotate_figure(KA_map_sci, fig.lab=paste("(A)", wf_names["sci"]), fig.lab.size=14, fig.lab.face="bold") |
+      annotate_figure(KA_map_vpf, fig.lab=paste("(B)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(KA_map_si, fig.lab=paste("(C)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(KA_map_ff, fig.lab=paste("(D)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
+    ) +
+    plot_layout(design = c(area(1,1,9,8), area(10,1,18,8), area(19,1,26,3), area(19,5,26,8))) +
+    theme(plot.tag = element_text(size=16, face="bold"))
+ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.png"), 
+       width=10, height=15, plot=KA_maps_with_unfiltered, bg="white")
+ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.tif"), 
+       width=10, height=15, plot=KA_maps_with_unfiltered, bg="white")
+
+```
+
+
+```{r rtt_variances_table}
+all_rtt_variance <- 
+    SP_rtt_variance %>% rename("S. pneumoniae PMEN1" = "variance") %>% 
+    full_join(SET_rtt_variance %>% rename("S. enterica" = "variance"), by = "method") %>% 
+    full_join(ECG_rtt_variance %>% rename("E. coli" = "variance"), by = "method") %>% 
+    full_join(KA_rtt_variance %>% rename("Klebs Alfred" = "variance"), by = "method") %>% 
+    mutate(across(where(is.numeric), \(x) round(x, 3))) %>% 
+    slice(match(names(wf_names), method)) %>% # order
+    rename("Workflow" = "method") %>% 
+    mutate(Recombination = if_else(Workflow %in% c("si", "ff"), "Unfiltered", "Filtered")) %>% 
+    relocate(Recombination, .after = "Workflow") %>% 
+    mutate(Workflow = wf_names[Workflow])
+
+all_rtt_variance
+
+```
+
