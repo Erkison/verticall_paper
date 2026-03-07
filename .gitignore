@@ -1,0 +1,13 @@
+.DS_Store
+.Rproj.user
+.Rhistory
+.RData*
+.Ruserdata
+*.Rproj
+
+NOT_SHARED*
+
+*.html
+figures/*.tif
+figures/*.svg
+figures/*.pdf

@@ -1,1 +1,7 @@
-## This repo contains data and code to generate all figures and tables in the Verticall [paper]()
+## Verticall paper
+
+
+This repo contains all code used for genome and data analyses for the Verticall [paper]()
+
+
+The data directory is available on [figshare]()
