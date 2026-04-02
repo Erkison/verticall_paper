@@ -53,7 +53,7 @@ my_roottotip <- function(tree, date, rate=NA, permTest=10000, showFig=T,
         if (correl2 >= correl) { pvalue = pvalue + 1/permTest }
     }
     if (rate < 0) { warning("The linear regression suggests a negative rate.") }
-    if (showFig == F) return(list(rate = rate, ori = ori, pvalue = pvalue))
+    if (showFig == F) return(list(rate = rate, ori = ori, pvalue = pvalue, r2 = round(r2,2)))
     old.par = par(no.readonly = T)
     par(xpd = NA, mar = c(1,0,1,1), oma = c(1, 0, 1, 1)) # MOD.
     if (colored) {
@@ -100,7 +100,7 @@ my_roottotip <- function(tree, date, rate=NA, permTest=10000, showFig=T,
               cex=1, outer=FALSE, adj = 0)
     }
     par(old.par)
-    return(list(rate = rate, ori = ori, pvalue = pvalue, r2=round(r2,2)))
+    return(list(rate = rate, ori = ori, pvalue = pvalue, r2 = round(r2,2)))
 }
 
 get_matching_nodes_in_tree <- function(tree, tree_nodes, other_tree){
@@ -626,4 +626,14 @@ make_tanglegram <- function(tree1, tree2, title1="tree1", title2="tree2", untang
         margin_inner = 0.8, sub = "", hang=T, match_order_by_labels = TRUE,
         main_left = title1, main_right = title2
     )
+}
+
+get_glm_df <- function(model){ 
+    summary(model)$coefficients[-1,] %>% 
+        as_tibble(rownames = "Predictor") %>% 
+        rename(P = `Pr(>|z|)`, StdErr = `Std. Error`) %>% 
+        mutate(OR = round(exp(Estimate), 2),
+               lower = round(exp(Estimate - (1.96 * StdErr)), 2),
+               upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>% 
+        select(Predictor, Estimate, StdErr, OR, lower, upper, P)
 }

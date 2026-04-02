@@ -185,7 +185,7 @@ summarise_recs(SP_sgi_rec)
 
 # verticall pairwise -------------------
 SP_vpf_pairwise_tsv_df <- read_tsv(
-    file.path(SP_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+    file.path(SP_data_dir, "verticall_pairwise/verticall_pairwise.tsv.xz"), show_col_types = F)
 SP_vpf_ref_to_contig_pos_df <- read_tsv(
     file.path(SP_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
 SP_vpf_rec_parsed <- parse_verticall_pairwise_rec(SP_vpf_pairwise_tsv_df, SP_vpf_ref_to_contig_pos_df) 
@@ -553,7 +553,7 @@ summarise_recs(ECG_sgi_rec)
 
 # verticall pairwise -------------------
 ECG_vpf_pairwise_tsv_df <- read_tsv(
-    file.path(ECG_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+    file.path(ECG_data_dir, "verticall_pairwise/verticall_pairwise.tsv.xz"), show_col_types = F)
 ECG_vpf_ref_to_contig_pos_df <- read_tsv(
     file.path(ECG_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
 ECG_vpf_rec_parsed <- parse_verticall_pairwise_rec(ECG_vpf_pairwise_tsv_df, ECG_vpf_ref_to_contig_pos_df) 
@@ -771,7 +771,7 @@ summarise_recs(KA_sci_rec)
 
 # verticall pairwise -------------------
 KA_vpf_pairwise_tsv_df <- read_tsv(
-    file.path(KA_data_dir, "verticall_pairwise/verticall_pairwise.tsv.gz"), show_col_types = F)
+    file.path(KA_data_dir, "verticall_pairwise/verticall_pairwise.tsv.xz"), show_col_types = F)
 KA_vpf_ref_to_contig_pos_df <- read_tsv(
     file.path(KA_data_dir, "verticall_pairwise/ref_coordinates.tsv"), show_col_types = F) 
 KA_vpf_rec_parsed <- parse_verticall_pairwise_rec(KA_vpf_pairwise_tsv_df, KA_vpf_ref_to_contig_pos_df) 

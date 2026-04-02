@@ -42,17 +42,21 @@ custom_plots_theme2 <- ggplot2::theme(
     plot.title = element_text(size = 16), legend.text = element_text(size = 14),
     legend.title = element_text(size = 16), legend.position = "bottom")
 custom_plots_theme <- ggplot2::theme(
-    axis.text=element_text(size=12), axis.title=element_text(size=12),
-    legend.text=element_text(size=12), legend.title=element_text(size=12),
-    plot.title=element_text(size=12), legend.position = "bottom")
+    axis.text=element_text(size=12), axis.title=element_text(size=14),
+    legend.text=element_text(size=12), legend.title=element_text(size=14),
+    plot.title=element_text(size=14), legend.position = "bottom")
+
+source(file.path(main_dir,"misc_functions.R"))
+source(file.path(main_dir, "methods/07_genome_analyses_test_set_5_K_pneumo/scripts/08_bactdating/bactdating_functions.R"))
 ```
 
 ```{r, fig.height=7, fig.width=10}
 # nucleotide divergence
-all_SLs <- list.files(file.path(kpn_data_dir, "selected_clones"), pattern="SL_*", full.names=T)
-mean_dist_tsvs <- fs::dir_ls(file.path(all_SLs, "verticall_dist"), 
+all_SLs_dir <- list.files(file.path(kpn_data_dir, "selected_clones"), pattern="SL_*", full.names=T)
+all_SLs <- basename(all_SLs_dir)
+mean_dist_tsvs <- fs::dir_ls(file.path(all_SLs_dir, "verticall_dist"), 
                              glob="*_mean_distance.tsv") %>% as.character()
-mean_dists <- mean_dist_tsvs %>% purrr::map_df(
+kpn_mean_dists <- mean_dist_tsvs %>% purrr::map_df(
     ~ read_tsv(., show_col_types = F) %>%
         filter(result_level == "primary") %>% 
         reframe(mean_distance = mean(mean_distance)) %>%
@@ -60,6 +64,25 @@ mean_dists <- mean_dist_tsvs %>% purrr::map_df(
     select(Sublineage, mean_distance) %>% 
     mutate(nuc_divergence = mean_distance*100) %>% 
     mutate(Sublineage = sub("SL_", "SL",  Sublineage))
+
+# root to tip regression coefficients
+kpn_r2 <- purrr::map_dfr(setdiff(all_SLs, c("SL_10226", "SL_11518")), function(sl) {
+    print(sl)
+    if(grepl("^SL[0-9]", sl)) {sl = sub("^SL", "SL_", sl)}
+    gb <- prepare_bactdate_data(selected_clones_data, gubbins_dir=file.path(
+        kpn_data_dir, "selected_clones", sl, "gubbins"))
+    gb_r2 <- my_roottotip(gb$tree, gb$dates_rtt, showFig=F)$r2
+    va <- prepare_bactdate_data(selected_clones_data, verticall_dir=file.path(
+        kpn_data_dir, "selected_clones", sl, "verticall"))
+    va_r2 <- my_roottotip(va$tree, va$dates_rtt, showFig=F)$r2
+    vd <- prepare_bactdate_data(selected_clones_data, verticall_dir=file.path(
+        kpn_data_dir, "selected_clones", sl, "verticall_dist"))
+    vd_r2 <- my_roottotip(vd$tree, vd$dates_rtt, showFig=F)$r2
+    if(grepl("^SL_[0-9]", sl)) {sl = sub("^SL_", "SL", sl)}
+    tibble(Sublineage = sl, method = c("GB", "VA", "VD"), 
+           r2 = c(gb_r2, va_r2, vd_r2))
+})
+
 
 # load K pneumo bactdating data
 kp_bd_results_raw <- readxl::read_xlsx(file.path(main_dir, "data/BactDate_results.xlsx"), 
@@ -79,9 +102,16 @@ kp_bd_performance_long <- kp_bd_performance %>%
     mutate(convergence = factor(convergence, levels=c("No/poor convergence", "Converged"))) %>% 
     mutate(Converged = if_else(convergence == "Converged", "Yes", "No")) %>%
     mutate(Converged = factor(Converged, levels = c("No", "Yes"))) %>%
-    left_join(mean_dists, by = "Sublineage") %>% 
+    left_join(kpn_mean_dists, by = "Sublineage") %>% 
+    left_join(kpn_r2, by = c("Sublineage", "method")) %>% 
     # rescale for glmm model
-    mutate(N_isolates_z = scale(N_isolates), nuc_divergence_z = scale(nuc_divergence))
+    mutate(N_isolates_z = scale(N_isolates), nuc_divergence_z = scale(nuc_divergence),
+           r2_z = scale(r2)) %>% 
+    # mods for plot
+    left_join(kp_bd_performance_long %>% filter(method == 'GB') %>% 
+                  mutate(conv_gubbins = Converged) %>% select(Sublineage, conv_gubbins), 
+              by = "Sublineage") %>% 
+    mutate(method_full = recode(method, !!! method_map))
 
 ```
 
@@ -190,25 +220,65 @@ combined_perf_summary_plots
 <br>
 
 ```{r predictors_of_convergence}
-kp_bd_performance_long %>% 
-    ggplot(aes(x = Converged, y = N_isolates)) + geom_boxplot() + 
-    geom_jitter(width=0.1) + facet_wrap(~method) +
-    labs(y = "No. of isolates")
-kp_bd_performance_long %>% 
-    ggplot(aes(x = Converged, y = nuc_divergence)) + geom_boxplot() + 
-    geom_jitter(width=0.1) + facet_wrap(~method) +
-    labs(y = "Nucleotide divergence")
 
-kp_bd_model <- glmer(Converged ~ N_isolates_z + nuc_divergence_z + method + (1 | Sublineage),
-               data = kp_bd_performance_long, family = binomial)
-summary(kp_bd_model)
-kp_bd_model_df <- summary(kp_bd_model)$coefficients[-1,] %>% 
-    as_tibble(rownames = "Predictor") %>% 
-    rename(P = `Pr(>|z|)`, StdErr = `Std. Error`) %>% 
-    mutate(OR = round(exp(Estimate), 2),
-           lower = round(exp(Estimate - (1.96 * StdErr)), 2),
-           upper = round(exp(Estimate + (1.96 * StdErr)), 2)) %>% 
-    select(Predictor, Estimate, StdErr, OR, lower, upper, P)
+################################
+# # TO DO
+# - Add the R2 values from each input tree to model
+################################
+
+# Individual models per method
+kp_bd_model_GB <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
+               data = kp_bd_performance_long %>% filter(method == "GB"), family = binomial)
+kp_bd_model_VA <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
+               data = kp_bd_performance_long %>% filter(method == "VA"), family = binomial)
+kp_bd_model_VD <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
+               data = kp_bd_performance_long %>% filter(method == "VD"), family = binomial)
+
+# rm(list = c(ls(pattern = glob2rx("kp_bd_model*"))))
+
+kp_bd_model_df <- bind_rows(
+    get_glm_df(kp_bd_model_GB) %>% mutate(Model = "Gubbins"),
+    get_glm_df(kp_bd_model_VA) %>% mutate(Model = "Verticall alignment"),
+    get_glm_df(kp_bd_model_VD) %>% mutate(Model = "Verticall distance")
+) %>% relocate(Model, .before = Predictor)
+# write_tsv(kp_bd_model_df %>% 
+#               mutate(Estimate = round(Estimate, 4), StdErr = round(StdErr, 4), P = round(P, 4)), 
+#           file.path(main_dir, "tables/TableS12_KpConvergencePredModels.tsv"))
+
+
+# Plot nucleotide divergence per convergence, across individual methods
+plot_kpn_bd_predictor <- function(kpn_perf_long_df, y_var, y_label) {
+    ggplot(kpn_perf_long_df, aes(x = Converged, y = .data[[y_var]])) + 
+        geom_boxplot(outlier.shape = NA) + 
+        geom_jitter(aes(color = conv_gubbins), width = 0.2, size = 2, alpha = 0.8) + 
+        scale_color_manual(
+            values = c("No" = "red", "Yes" = "blue"), 
+            name = "Converged\nwith\nGubbins"
+        ) +
+        facet_wrap(~method_full) +
+        labs(y = y_label) +
+        guides(color = guide_legend(override.aes = list(size = 4))) +
+        theme_bw() + custom_plots_theme +
+        theme(
+            strip.text = element_text(size = 12), 
+            legend.position = "right", legend.key.spacing.y = unit(0.4, "cm"),
+            legend.title = element_text(margin = margin(0, 0, 0.7, 0, "cm"))
+        )
+}
+
+kpn_nuc_div_plot <- plot_kpn_bd_predictor(kp_bd_performance_long, "nuc_divergence", "Nucleotide divergence") 
+kpn_n_genomes_plot <- plot_kpn_bd_predictor(kp_bd_performance_long, "N_isolates", "No of genomes") 
+
+kpn_bd_pred_plots <- ggarrange(
+    kpn_nuc_div_plot + theme(axis.title.x = element_blank()), 
+    kpn_n_genomes_plot, 
+    nrow=2, align="hv", common.legend=T, legend="right", labels=c("(A)", "(B)"))
+
+
+ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.png"), 
+       plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
+ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.tif"), 
+       plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
 ```
 
 <br>
