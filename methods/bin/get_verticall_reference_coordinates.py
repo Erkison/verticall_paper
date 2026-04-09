@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sys
 from multiprocessing import Pool
 from verticall.__main__ import parse_args
