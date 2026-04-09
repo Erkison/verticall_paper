@@ -44,8 +44,6 @@ wf_names <- c("si" = "Unfiltered, alignment-based",
               "sci" = "ClonalFrameML", 
               "svi" = "Verticall alignment", 
               "vpf" = "Verticall distance")
-
-# for verticall pairwise recombination blocks, only show blocks rel to ≥2 other genomes
 vpf_rec_min_pairs <- 1 
 
 ```
@@ -134,10 +132,7 @@ ape::nodelabels(text=1:SP_tree_sgi$Nnode,
                 node=1:SP_tree_sgi$Nnode+ape::Ntip(SP_tree_sgi),
                 frame="none",adj=c(1.1,-0.4), cex=0.6)
 SP_nodes_to_highlight <- c(21, 126, 97, 65) # node indices from plot above, not absolute node numbers
-SP_sgi_nodes_hl <- tibble(
-    node_in_first_tree = SP_nodes_to_highlight, 
-    node_in_other_tree = SP_nodes_to_highlight + ape::Ntip(SP_tree_sgi)
-) 
+SP_sgi_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_sgi)
 SP_svi_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_svi)
 SP_sci_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_sci)
 SP_vpf_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_vpf)
@@ -154,7 +149,7 @@ SP_map_ff <- plot_rec_map(
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_ff$r2))))
 
 # verticall reference -------------------
-SP_svi_tsv_file <- file.path(SP_data_dir, "verticall_reference/verticall_reference.tsv")
+SP_svi_tsv_file <- file.path(SP_data_dir, "verticall_reference/verticall_reference.tsv.xz")
 SP_svi_rec_parsed <- parse_verticall_ref_rec(
     SP_svi_tsv_file, SP_tree_svi, node_highlight_df=SP_svi_nodes_hl, tree_scale=50,
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_svi$r2),
@@ -366,10 +361,8 @@ ape::nodelabels(text=1:SET_tree_sgi$Nnode,
                 node=1:SET_tree_sgi$Nnode+ape::Ntip(SET_tree_sgi),
                 frame="none",adj=c(1.1,-0.4), cex=0.6)
 SET_nodes_to_highlight <- c(280, 2211, 3352) # node indices from plot above, not absolute node numbers
-SET_sgi_nodes_hl <- tibble(
-    node_in_first_tree = SET_nodes_to_highlight, 
-    node_in_other_tree = SET_nodes_to_highlight + ape::Ntip(SET_tree_sgi)
-) 
+
+SET_sgi_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_sgi)
 SET_svi_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_svi)
 SET_si_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_si)
 SET_ff_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_ff)
@@ -383,7 +376,7 @@ SET_map_si <- plot_rec_map(
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_si$r2))))
 SET_map_ff <- plot_rec_map(
     SET_tree_ff, node_highlight_df=SET_ff_nodes_hl,
-    node_highlight_color=SET_node_colors, highlight_alpha = 0.5, tree_scale=50,
+    node_highlight_color=SET_node_colors, tree_scale=50,
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_ff$r2))))
 
 # gubbins
@@ -400,7 +393,7 @@ summarise_recs(SET_sgi_rec)
 # verticall reference
 SET_dir_svi <- file.path(SET_data_dir, "verticall_reference/")
 SET_svi_rec_parsed <- parse_verticall_ref_rec(
-    file.path(SET_dir_svi,"verticall_reference.tsv"), SET_tree_svi,
+    file.path(SET_dir_svi,"verticall_reference.tsv.xz"), SET_tree_svi,
     node_highlight_df=SET_svi_nodes_hl, node_highlight_color=SET_node_colors, tree_scale=5,
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SET_rtt_svi$r2))))
 SET_map_svi <- SET_svi_rec_parsed$rec_plot
@@ -514,18 +507,19 @@ ECG_vpf_nodes_hl <- get_group_mrca(ECG_tree_vpf, ECG_df, "CG", "id")
 # unfiltered trees -------------------
 ECG_map_si <- plot_rec_map(
     ECG_tree_si, node_highlight_df=ECG_si_nodes_hl,
-    node_highlight_color=ECG_CG_colors, tree_scale=10,
+    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, tree_scale=10, 
     plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="si",2]))
 ECG_map_ff <- plot_rec_map(
     ECG_tree_ff, node_highlight_df=ECG_ff_nodes_hl,
-    node_highlight_color=ECG_CG_colors, tree_scale=10,
+    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, tree_scale=10,
     plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="ff",2]))
 
 # verticall reference -------------------
-ECG_svi_tsv_file <- file.path(ECG_data_dir, "verticall_reference/verticall_reference.tsv")
+ECG_svi_tsv_file <- file.path(ECG_data_dir, "verticall_reference/verticall_reference.tsv.xz")
 ECG_svi_rec_parsed <- parse_verticall_ref_rec(
-    ECG_svi_tsv_file, ECG_tree_svi, 
-    node_highlight_df=ECG_svi_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=5000,
+    ECG_svi_tsv_file, ECG_tree_svi, node_highlight_df=ECG_svi_nodes_hl, 
+    node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
+    highlight_alpha=0.8, tree_scale=5000,
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="svi",2]))
 ECG_map_svi <- ECG_svi_rec_parsed$rec_plot
 ECG_svi_rec <- ECG_svi_rec_parsed$rec
@@ -534,8 +528,9 @@ summarise_recs(ECG_svi_rec)
 # cfml -------------------
 ECG_sci_prefix <- file.path(ECG_data_dir, "clonalframeml/clonalframeml")
 ECG_sci_rec_parsed <- parse_cfml_rec(
-    ECG_sci_prefix, ECG_tree_sci, 
-    node_highlight_df=ECG_sci_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=100,
+    ECG_sci_prefix, ECG_tree_sci, node_highlight_df=ECG_sci_nodes_hl, 
+    node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
+    highlight_alpha=0.8, tree_scale=100,
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sci",2]))
 ECG_map_sci <- ECG_sci_rec_parsed$rec_plot
 ECG_sci_rec <- ECG_sci_rec_parsed$rec
@@ -544,8 +539,9 @@ summarise_recs(ECG_sci_rec)
 # gubbins  -------------------
 ECG_sgi_prefix <- file.path(ECG_data_dir, "gubbins/gubbins")
 ECG_sgi_rec_parsed <- parse_gubbins_rec(
-    ECG_sgi_prefix, ECG_tree_sgi, 
-    node_highlight_df=ECG_sgi_nodes_hl, node_highlight_color=ECG_CG_colors, tree_scale=500,
+    ECG_sgi_prefix, ECG_tree_sgi, node_highlight_df=ECG_sgi_nodes_hl, 
+    node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
+    highlight_alpha=0.8, tree_scale=500,
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sgi",2]))
 ECG_map_sgi <- ECG_sgi_rec_parsed$rec_plot
 ECG_sgi_rec <- ECG_sgi_rec_parsed$rec
@@ -571,7 +567,8 @@ ECG_vpf_rec %>%
 ECG_map_vpf <- plot_verticall_pw_map(
     ECG_vpf_rec, ECG_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
     node_highlight_df=ECG_vpf_nodes_hl, node_highlight_color=ECG_CG_colors,
-    node_highlight_legend=T, tree_scale=5000,
+    node_highlight_legend=T, highlight_clade_tips=F, 
+    highlight_alpha=0.8, tree_scale=5000,
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="vpf",2]))
 
 

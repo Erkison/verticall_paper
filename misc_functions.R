@@ -112,8 +112,9 @@ get_matching_nodes_in_tree <- function(tree, tree_nodes, other_tree){
         # Find MRCA in the other tree 
         matching_node_abs <- tidytree::MRCA(other_tree, subtree_tips)
         matching_node_int <- matching_node_abs - ape::Ntip(other_tree)
-        tibble::tibble(node_in_first_tree = x,
-                       node_in_other_tree = matching_node_abs)
+        tibble::tibble(node_in_reference_tree = x,
+                       node = matching_node_abs,
+                       tip = subtree_tips)
     })
     return(matched_nodes)
 }
@@ -126,7 +127,7 @@ get_group_mrca <- function(tree, df, group_column, tip_column){
     group_mrca <- purrr::map_dfr(grps, function(x) { # 'x' is each unique group
         tips <- df %>% filter(my_group_col == x) %>% pull(my_tip_lab_col)
         grp_mrca <- tidytree::MRCA(tree, tips)
-        tibble::tibble(Group = x, Node = grp_mrca)})
+        tibble::tibble(Group = x, node = grp_mrca, tip = tips)})
     return(group_mrca)
 }
 
@@ -153,7 +154,8 @@ merge_overlapping_genome_ranges <- function(df, group_col, start_col, end_col){
 plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pairwise"), 
                          show_tips=FALSE, show_legend=FALSE,
                          node_highlight_df=NULL, node_highlight_legend=FALSE,
-                         node_highlight_color=NULL, highlight_alpha=0.6, tree_scale=10,
+                         node_highlight_color=NULL, highlight_alpha=0.4, 
+                         highlight_clade_tips=TRUE, tree_scale=10,
                          plot_annot=NULL, pairwise_color_mode=c("n_pairs", "opacity")){
     verticall_wf <-  match.arg(verticall_wf)
     pairwise_color_mode <-  match.arg(pairwise_color_mode)
@@ -170,38 +172,52 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
             theme(plot.subtitle = element_text(hjust=0.15, size=10, margin=margin(t=15))))}
         } +
         { if (show_tips) geom_tiplab(size = 1.5) }
-    
+
     # Highlight clades
     if (! is.null(node_highlight_df) ){
+        colnames(node_highlight_df) <- c("group", "node", "tip")
         if (is.null(node_highlight_color)) {
             node_highlight_color <- unname(Polychrome::glasbey.colors(n=25)[-1])
         }
-        names(node_highlight_df) <- c("Node_name", "Node")
         p_tree <- p_tree + 
-            geom_hilight(data=node_highlight_df, 
-                         mapping=aes(node=Node, fill=as.factor(Node_name)), 
+            geom_hilight(data=node_highlight_df %>% distinct(group, node), 
+                         mapping=aes(node=node, fill=as.factor(group)), 
                          alpha=highlight_alpha) +
             labs(fill = NULL) + 
             scale_fill_manual(values = node_highlight_color) +
             theme(legend.text=element_text(size=10, margin=margin(0,0,0,0)),
                   legend.key.size = unit(3,"mm"), legend.key.spacing.x = unit(3,"mm")) +
             { if (! node_highlight_legend) { guides(fill="none") } }
+        if (highlight_clade_tips) {
+            # Calculate offset based on tree width
+            x_max <- max(p_tree$data$x, na.rm = TRUE)
+            if (x_max == 0) x_max <- 1 
+            gap_size     <- x_max * 0.02  
+            strip_width  <- x_max * 0.04
+            p_tree <- p_tree + ggnewscale::new_scale_colour() +
+                geom_segment(
+                    data = p_tree$data %>% filter(isTip) %>% 
+                        inner_join(node_highlight_df, by = c("label" = "tip")),
+                    aes(x = x_max + gap_size, xend = x_max + gap_size + strip_width,
+                        y = y, yend = y, color = as.factor(group)), linewidth = 0.8) +
+                scale_color_manual(values = node_highlight_color, guide = "none") +
+                theme(plot.margin = margin(r=0, l=0, unit='mm'))
+        }
     }
     
-    # Plot tree scale (ensures top layer)
-    p_tree <- p_tree +
-        geom_treescale(x=0.1, y=ape::Ntip(tree)/2, offset=2, width=tree_scale)
+    # add tree scale after highlight to ensure it's always top layer
+    p_tree <- p_tree + geom_treescale(x=0.1, y=ape::Ntip(tree)/2, offset=2, width=tree_scale)
     
-    if(is.null(recomb_df)) { return(p_tree) } # return only tree if no rec df supplied
+    # Return only tree if no rec df supplied
+    if(is.null(recomb_df)) { return(p_tree) } 
     
     # Plot recombinations 
     stopifnot(all(c("Node", "Beg", "End") %in% names(recomb_df)))
     rec <- recomb_df
     
     # Re-order recombination data to match tree plot order
-    tree_data <- p_tree$data
     rec %<>% 
-        mutate(Node = factor(Node, levels = tree_data$label[order(tree_data$y)])) %>% 
+        mutate(Node = factor(Node, levels = p_tree$data$label[order(p_tree$data$y)])) %>% 
         mutate(across(c(Beg, End), \(x) x/1000000)) # rescale to MB
     # Plot recomb blocks (right)
     p_rec <- ggplot(rec, aes(y = Node, xmin = Beg, xmax = End)) +
@@ -226,7 +242,6 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
                                       limits = c(1,length(tree$tip.label))) +
                 theme(legend.key.width = unit(0.07, 'npc'))
         } else {
-            # p_rec <- p_rec + geom_linerange(color="#EF3B2C", size=1, alpha=.2)
             p_rec <- p_rec + geom_linerange(color="black", size=1, alpha=.1)
         }
     }
@@ -245,7 +260,7 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
         coord_cartesian(xlim = c(0, ceiling(max(rec$End, na.rm=T) * 2) / 2))
 
     # Combine plots
-    p <- ggarrange(p_tree, p_rec, align = "h", widths = c(0.35, 0.65), 
+    p <- ggarrange(p_tree, p_rec, align = "h", nrow=1, widths = c(0.35, 0.65), 
                    legend = if_else(show_legend, "bottom", "none"))
     # return(list(p_tree, p_rec))
     return(p)
@@ -254,7 +269,8 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
 # Plot gubbins recombination map
 parse_gubbins_rec <- function(gubbins_path_and_prefix, alt_tree_for_plot=NULL, show_tips=F, 
                              show_legend=T, node_highlight_df=NULL, node_highlight_legend=F,
-                             node_highlight_color=NULL, tree_scale=10, plot_annot=NULL){
+                             node_highlight_color=NULL, highlight_alpha=0.4, 
+                             highlight_clade_tips=T, tree_scale=10, plot_annot=NULL){
     gubbins_tree_file <- paste0(gubbins_path_and_prefix, ".final_tree.tre")
     gubbins_gff_file <- paste0(gubbins_path_and_prefix, ".recombination_predictions.gff")
     # Set tree to plot
@@ -276,18 +292,19 @@ parse_gubbins_rec <- function(gubbins_path_and_prefix, alt_tree_for_plot=NULL, s
         left_join(rec, by = c("Node")) %>% 
         mutate(blockSize = End - Beg)
     # Plot
-    p <- plot_rec_map(tree, rec, show_tips=show_tips, show_legend=show_legend,
-                      node_highlight_df=node_highlight_df, 
-                      node_highlight_legend=node_highlight_legend,
-                      node_highlight_color=node_highlight_color, 
-                      tree_scale=tree_scale, plot_annot=plot_annot)
+    p <- plot_rec_map(
+        tree, rec, show_tips=show_tips, show_legend=show_legend,
+        node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
+        node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
+        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
     return(list(rec_plot = p, rec = rec))
 }
 
 # Plot clonalframeml recombination map
 parse_cfml_rec <- function(cfml_path_and_prefix, alt_tree_for_plot=NULL, show_tips=F, 
                           show_legend=T, node_highlight_df=NULL, node_highlight_legend=F,
-                          node_highlight_color=NULL, tree_scale=10, plot_annot=NULL) {
+                          node_highlight_color=NULL, highlight_alpha=0.4, 
+                          highlight_clade_tips=T, tree_scale=10, plot_annot=NULL) {
     prefix = cfml_path_and_prefix
     cfml_treefile <- paste(prefix, ".labelled_tree.newick", sep = "")
     istatefile <- paste(prefix, ".importation_status.txt", sep = "")
@@ -330,18 +347,19 @@ parse_cfml_rec <- function(cfml_path_and_prefix, alt_tree_for_plot=NULL, show_ti
     } 
     
     # Plot
-    p <- plot_rec_map(tree, rec, show_tips=show_tips, show_legend=show_legend,
-                      node_highlight_df=node_highlight_df,
-                      node_highlight_legend=node_highlight_legend,
-                      node_highlight_color=node_highlight_color, 
-                      tree_scale=tree_scale, plot_annot=plot_annot)
+    p <- plot_rec_map(
+        tree, rec, show_tips=show_tips, show_legend=show_legend,
+        node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
+        node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
+        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
     return(list(rec_plot = p, rec = rec))
 }
 
 # Plot verticall ref recombination map
 parse_verticall_ref_rec <- function(vert_tsv_file, vert_tree, show_tips=F, show_legend=T,
                                    node_highlight_df=NULL, node_highlight_legend=F,
-                                   node_highlight_color=NULL, tree_scale=10, plot_annot=NULL){
+                                   node_highlight_color=NULL, highlight_alpha=0.4, 
+                                   highlight_clade_tips=T, tree_scale=10, plot_annot=NULL){
     vert_tsv <- read_tsv(vert_tsv_file, show_col_types = F)
     rec <- vert_tsv %>% 
         filter(result_level %in% c("primary")) %>% 
@@ -360,11 +378,11 @@ parse_verticall_ref_rec <- function(vert_tsv_file, vert_tree, show_tips=F, show_
     rec <- data.frame(Node=tree$tip.label) %>% as_tibble() %>% 
         left_join(rec, by = c("Node"))
     # Plot
-    p <- plot_rec_map(tree, rec, show_tips=show_tips, show_legend=show_legend,
-                      node_highlight_df=node_highlight_df,
-                      node_highlight_legend=node_highlight_legend,
-                      node_highlight_color=node_highlight_color, 
-                      tree_scale=tree_scale, plot_annot=plot_annot)
+    p <- plot_rec_map(
+        tree, rec, show_tips=show_tips, show_legend=show_legend,
+        node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
+        node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
+        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
     
     return(list(rec_plot = p, rec = rec))
 }
@@ -412,7 +430,7 @@ parse_verticall_pairwise_rec <- function(verticall_pw_tsv_df, ref_pos_to_contig_
     rec_blocks_merged <- get_merged_pairwise_blocks(rec_blocks, genome_column="Genome")
 
     # Translate recomb block positions in each sample to reference positions
-    # One sample at a time with furrr cos dfs are large and fuzzyjoin is not mem efficient
+    # should optimise cos dfs are large and fuzzyjoin is not mem efficient
     samples <- unique(coords_map$sample)
     rec <- furrr::future_map_dfr(samples, ~{
         # join blocks df to ref coordinates df if 
@@ -421,8 +439,6 @@ parse_verticall_pairwise_rec <- function(verticall_pw_tsv_df, ref_pos_to_contig_
         rec_blocks_merged %>% filter(Genome == .x) %>% 
             fuzzyjoin::fuzzy_left_join(
                 coords_map %>% filter(sample == .x),
-                # Modify to account for overlaps. If the block region overlaps 
-                # the alignment region, should still be able to deduce block pos
                 by = c(
                     "blockContig" = "alnContigName",         
                     "blockStart" = "alnContigStart",
@@ -490,6 +506,7 @@ plot_verticall_pw_map <- function(recomb_df, vert_pw_tree, show_tips=F, show_leg
                                   plot_color_mode=c("n_pairs", "opacity"),
                                   min_pairs_per_block=1, node_highlight_df=NULL,
                                   node_highlight_legend=F, node_highlight_color=NULL, 
+                                  highlight_alpha=0.4, highlight_clade_tips=T, 
                                   tree_scale=10, plot_annot=NULL){
     plot_color_mode <- match.arg(plot_color_mode)
     # use `n_pairs` for plotting distinct recs after merging
@@ -511,7 +528,8 @@ plot_verticall_pw_map <- function(recomb_df, vert_pw_tree, show_tips=F, show_leg
     plot_rec_map(vert_pw_tree, rec, show_tips=show_tips, verticall_wf="pairwise", 
                  show_legend=show_legend, node_highlight_df=node_highlight_df,
                  node_highlight_legend=node_highlight_legend,
-                 node_highlight_color=node_highlight_color, 
+                 node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha,
+                 highlight_clade_tips=highlight_clade_tips,
                  tree_scale=tree_scale, plot_annot=plot_annot,
                  pairwise_color_mode = plot_color_mode)
 }
@@ -605,7 +623,7 @@ make_tanglegram <- function(tree1, tree2, title1="tree1", title2="tree2", untang
     
     # Make named color vector match dend1 order
     line_colors <- ids_to_col_map[ordered_labels_1]
-    
+
     if (color_branches) {
         dend1 <- dend1 %>% color_branches(col = ids_to_col_map[ordered_labels_1],
                                           labels = ordered_labels_1)
