@@ -196,15 +196,15 @@ combined_dist_plots2 <- (mean_dist_hist_plots_combined + dist_hist_plot_faceted_
     theme(legend.position = "bottom")
 
 # Save plots
-ggsave(file=file.path(merge_SLs_figs_dir, today(), "mean_distances_between_SL_pairs.png"), 
+ggsave(file=file.path(merge_SLs_figs_dir, "mean_distances_between_SL_pairs.png"), 
        plot=mean_dist_hist_plot, width=10, height=6, bg="white")
-ggsave(file=file.path(merge_SLs_figs_dir, today(), "mean_distances_between_SL_pairs_with_inset.png"), 
+ggsave(file=file.path(merge_SLs_figs_dir, "mean_distances_between_SL_pairs_with_inset.png"), 
        plot=mean_dist_hist_plots_combined, width=10, height=6, bg="white")
-ggsave(file=file.path(merge_SLs_figs_dir, today(), "distances_between_genome_pairs.png"), 
+ggsave(file=file.path(merge_SLs_figs_dir, "distances_between_genome_pairs.png"), 
        plot=dist_hist_plot_faceted_scaled_y_axis, width=12, height=7, bg="white")
-ggsave(file=file.path(merge_SLs_figs_dir, today(), "combined_dist_plots.png"), 
+ggsave(file=file.path(merge_SLs_figs_dir, "combined_dist_plots.png"), 
        plot=combined_dist_plots, width=10, height=11, bg="white")
-ggsave(file=file.path(merge_SLs_figs_dir, today(), "combined_dist_plots2.png"), 
+ggsave(file=file.path(merge_SLs_figs_dir, "combined_dist_plots2.png"), 
        plot=combined_dist_plots2, width=10, height=12, bg="white")
 
 ```

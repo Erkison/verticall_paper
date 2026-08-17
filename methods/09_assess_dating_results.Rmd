@@ -19,6 +19,7 @@ library(ggpubr)
 library(ape)
 library(patchwork)
 library(lme4)
+library(BactDating)
 
 ```
 
@@ -83,6 +84,15 @@ kpn_r2 <- purrr::map_dfr(setdiff(all_SLs, c("SL_10226", "SL_11518")), function(s
            r2 = c(gb_r2, va_r2, vd_r2))
 })
 
+# year variance
+kpn_year_var <- selected_clones_data %>% 
+    mutate(Sublineage = paste0("SL", Sublineage)) %>% 
+    mutate(year2 = as.numeric(str_extract(year, "^\\d+"))) %>%
+    group_by(Sublineage) %>% 
+    reframe(year_var = var(year2, na.rm = T), 
+            year_span = max(year2, na.rm=T) - min(year2, na.rm=T))
+
+kpn_rec_counts <- read_tsv(file.path(kpn_data_dir, "selected_clones/rec_counts.tsv"), show_col_types = F)
 
 # load K pneumo bactdating data
 kp_bd_results_raw <- readxl::read_xlsx(file.path(main_dir, "data/BactDate_results.xlsx"), 
@@ -94,6 +104,8 @@ kp_bd_results_raw <- readxl::read_xlsx(file.path(main_dir, "data/BactDate_result
 kp_bd_performance <- kp_bd_results_raw %>% 
     filter(! Sublineage %in% c("SL10226", "SL11518")) %>% # Could not run Gubbins or VA so exclude
     select(Sublineage, N_isolates, GB=ESS_gubbins, VA=ESS_vr, VD=ESS_vd)
+# kp_bd_performance %>% filter(GB == "All >=200" & VD != "All >=200" & VA != "All >=200")
+# kp_bd_performance %>% filter(VA == "All >=200" & GB != "All >=200" & VD != "All >=200")
 
 kp_bd_performance_long <- kp_bd_performance %>% 
     pivot_longer(cols=-c(Sublineage, N_isolates), names_to="method", values_to="convergence") %>% 
@@ -104,8 +116,11 @@ kp_bd_performance_long <- kp_bd_performance %>%
     mutate(Converged = factor(Converged, levels = c("No", "Yes"))) %>%
     left_join(kpn_mean_dists, by = "Sublineage") %>% 
     left_join(kpn_r2, by = c("Sublineage", "method")) %>% 
+    left_join(kpn_year_var, by = c("Sublineage")) %>% 
+    left_join(kpn_rec_counts, by = c("Sublineage", "method")) %>% 
     # rescale for glmm model
-    mutate(N_isolates_z = scale(N_isolates), nuc_divergence_z = scale(nuc_divergence),
+    mutate(N_isolates_z = scale(N_isolates), 
+           nuc_divergence_z = scale(nuc_divergence),
            r2_z = scale(r2)) %>% 
     # mods for plot
     left_join(kp_bd_performance_long %>% filter(method == 'GB') %>% 
@@ -144,17 +159,23 @@ all_years_df <- kp_bd_performance %>%
                   select(Sublineage, id, year) %>% 
                   mutate(Sublineage = paste0("SL", Sublineage)),
               by = "Sublineage") %>% 
+    mutate(year2 = as.numeric(str_extract(year, "^\\d+"))) %>%
     arrange(Convergence) %>% 
     mutate(Sublineage = factor(Sublineage, levels=rev(unique(Sublineage))))
 
-all_years_plot <- all_years_df %>% ggplot(aes(x=year, y=Sublineage)) +
-    geom_jitter(aes(color=Convergence), height=0.1, width=0.25) +
-    scale_color_manual(values=cov_meth_cols) +
-    labs(x="Year", title="Distribution of isolation dates") +
+all_years_plot <- all_years_df %>% 
+    group_by(Sublineage, year2, Convergence) %>%
+    reframe(n_genomes = n()) %>% 
+    ggplot(aes(x = year2, y = Sublineage)) +
+    geom_point(aes(size = n_genomes, color = Convergence), alpha = 0.7) +
+    scale_size_continuous(range = c(1, 8), name = "No. of genomes") +
+    scale_color_manual(values = cov_meth_cols, 
+                       guide = guide_legend(override.aes = list(alpha=1, size=4))) +
+    labs(x="Year", title=NULL) +
     theme_minimal() + # custom_plots_theme +
     theme(axis.text.x = element_text(angle=45,vjust=1, hjust=1))
-# ggsave(file=file.path(comp_figs_dir, "all_years_plot.png"), 
-#        plot=all_years_plot, width=10, height=10, bg='white')
+ggsave(file=file.path(comp_figs_dir, "FigureS8_YearDistribution.png"),
+       plot=all_years_plot, width=10, height=12, bg='white')
 
 # all_years_plot
 ```
@@ -220,19 +241,13 @@ combined_perf_summary_plots
 <br>
 
 ```{r predictors_of_convergence}
-
-################################
-# # TO DO
-# - Add the R2 values from each input tree to model
-################################
-
-# Individual models per method
-kp_bd_model_GB <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
-               data = kp_bd_performance_long %>% filter(method == "GB"), family = binomial)
-kp_bd_model_VA <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
-               data = kp_bd_performance_long %>% filter(method == "VA"), family = binomial)
-kp_bd_model_VD <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2,
-               data = kp_bd_performance_long %>% filter(method == "VD"), family = binomial)
+# Individual models per method 
+kp_bd_model_GB <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2 + year_var + blocks,
+                      data = kp_bd_performance_long %>% filter(method == "GB"), family = binomial)
+kp_bd_model_VA <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2 + year_var + blocks,
+                      data = kp_bd_performance_long %>% filter(method == "VA"), family = binomial)
+kp_bd_model_VD <- glm(Converged ~ N_isolates_z + nuc_divergence_z + r2 + year_var + blocks,
+                      data = kp_bd_performance_long %>% filter(method == "VD"), family = binomial)
 
 # rm(list = c(ls(pattern = glob2rx("kp_bd_model*"))))
 
@@ -241,8 +256,8 @@ kp_bd_model_df <- bind_rows(
     get_glm_df(kp_bd_model_VA) %>% mutate(Model = "Verticall alignment"),
     get_glm_df(kp_bd_model_VD) %>% mutate(Model = "Verticall distance")
 ) %>% relocate(Model, .before = Predictor)
-# write_tsv(kp_bd_model_df %>% 
-#               mutate(Estimate = round(Estimate, 4), StdErr = round(StdErr, 4), P = round(P, 4)), 
+# write_tsv(kp_bd_model_df %>%
+#               mutate(Estimate = round(Estimate, 4), StdErr = round(StdErr, 4), P = round(P, 4)),
 #           file.path(main_dir, "tables/TableS12_KpConvergencePredModels.tsv"))
 
 
@@ -268,15 +283,17 @@ plot_kpn_bd_predictor <- function(kpn_perf_long_df, y_var, y_label) {
 
 kpn_nuc_div_plot <- plot_kpn_bd_predictor(kp_bd_performance_long, "nuc_divergence", "Nucleotide divergence") 
 kpn_n_genomes_plot <- plot_kpn_bd_predictor(kp_bd_performance_long, "N_isolates", "No of genomes") 
+kpn_year_var_plot <- plot_kpn_bd_predictor(kp_bd_performance_long, "year_var", "Year variance") 
 
 kpn_bd_pred_plots <- ggarrange(
     kpn_nuc_div_plot + theme(axis.title.x = element_blank()), 
-    kpn_n_genomes_plot, 
-    nrow=2, align="hv", common.legend=T, legend="right", labels=c("(A)", "(B)"))
+    kpn_n_genomes_plot + theme(axis.title.x = element_blank()), 
+    kpn_year_var_plot, 
+    ncol=1, align="hv", common.legend=T, legend="right", labels=c("(A)", "(B)", "(C)"))
 
 
 ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.png"), 
-       plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
+       plot=kpn_bd_pred_plots, width=9, height=9, bg = 'white')
 ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.tif"), 
        plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
 ```
@@ -308,6 +325,7 @@ neg_root_dates <- kp_bd_results_long %>% filter(root_date < 0 | root_date_lower 
 converged_SLs_all_workflows <- kp_bd_results_raw %>% 
     filter(ESS_gubbins=="All >=200" & ESS_vr=="All >=200" & ESS_vd=="All >=200") %>% 
     pull(Sublineage)
+neg_root_dates %>% filter(Sublineage %in% converged_SLs_all_workflows)
 
 # Converged runs
 kp_bd_results_converged <- kp_bd_results_long %>% 
@@ -643,7 +661,9 @@ SP_bd_mu_plot <- SP_bd_df %>%
     ggplot(aes(x=mu, y=method, color=method)) + 
     geom_linerange(aes(xmin=mu_lower, xmax=mu_upper, color=method), alpha=0.75, lwd=1.8) +
     geom_point(size=4) +
-    geom_text(aes(label = text, hjust=if_else(method %in% c("Didelot \net al. 2018", "Gubbins"),1,0)), 
+    geom_text(aes(label = text, 
+                  # hjust=if_else(method %in% c("Didelot \net al. 2018", "Gubbins"),1,0)
+                  hjust = 0), 
               size=4, vjust=2) +
     scale_color_manual(values=mycols2) +
     theme_bw() +
@@ -761,4 +781,7 @@ kp_bd_results_long %>%
     mutate(rep = sprintf("%s: %.1f [%.1f-%.1f] substitutions/year", method, mu, mu_lower, mu_upper)) %>% 
     select(Sublineage, method, mu, rep) # %>% view()
 ```
+
+
+
 

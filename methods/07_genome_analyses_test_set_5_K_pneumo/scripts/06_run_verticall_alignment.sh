@@ -104,7 +104,7 @@ verticall mask -i verticall.tsv -a ${INPUT_ALIGNMENT} \
 
 cd $OUTPUT_DIR/iqtree
 conda activate gubbinsv3_4
-iqtree2 -s ../masked_alignment_variants_only.fasta -T 32 --prefix ${CLONE}_iqtree
+iqtree2 -s ../masked_alignment_variants_only.fasta -T 32 -m GTR+G --prefix ${CLONE}_iqtree
 
 conda activate fastroot
 python3 FastRoot.py -i ${CLONE}_iqtree.treefile > ${CLONE}_iqtree.newick

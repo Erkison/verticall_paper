@@ -187,17 +187,17 @@ mkdir "$base_dir"/trees/snippy_iqtree
 cd "$base_dir"/trees/snippy_iqtree
 
 /usr/bin/time -v -o snippy_iqtree.time iqtree2 -s ../../alignments/snippy_core.fasta.gz \
-    -T 32 --prefix snippy_iqtree
+    -T 32 -m GTR+G --prefix snippy_iqtree
 ```
 
 IQ-TREE resources used:
 
 | Dataset              |   Time    | RAM (kB) |      Status       |
 ------------------------------------------------------------------|
-| S_pneumo_PMEN1       |   0:09:02 |   215868 | finished          |
-| S_enterica_Typhi_431 |   7:31:32 |  6634776 | finished          |
-| E_coli_GEMS          |   5:59:40 |  9149452 | finished          |
-| Klebsiella_Alfred    | 136:29:56 | 72492672 | finished          |
+| S_pneumo_PMEN1       |     05:12 |   190012 | finished          |
+| S_enterica_Typhi_431 |   8:36:43 |  7106608 | finished          |
+| E_coli_GEMS          |     41:09 |  4245712 | finished          |
+| Klebsiella_Alfred    |  10:25:15 | 31696888 | finished          |
 
 I gave each command one week to run, and if it wasn't done then, I killed it.
 

@@ -61,17 +61,19 @@ coresnpfilter -e -c 0.95 snippy_clonalframeml.fasta.gz | pigz -p4 > snippy_clona
 mkdir "$base_dir"/trees/snippy_clonalframeml_iqtree
 cd "$base_dir"/trees/snippy_clonalframeml_iqtree
 
-/usr/bin/time -v -o snippy_clonalframeml_iqtree.time ~/programs/iqtree-2.2.2.3-Linux/bin/iqtree2 -s ../../alignments/snippy_clonalframeml_core.fasta.gz -T 32 --prefix snippy_clonalframeml_iqtree
+/usr/bin/time -v -o snippy_clonalframeml_iqtree.time ~/programs/iqtree-2.2.2.3-Linux/bin/iqtree2 \
+    -s ../../alignments/snippy_clonalframeml_core.fasta.gz \
+    -T 32 -m GTR+G --prefix snippy_clonalframeml_iqtree
 ```
 
 IQ-TREE resources used:
 
 | Dataset              |   Time   | RAM (kB) |      Status       |
 -----------------------------------------------------------------|
-| S_pneumo_PMEN1       |   0:5:22 |   106484 | finished          |
+| S_pneumo_PMEN1       |    01:29 |   82944  | finished          |
 | S_enterica_Typhi_431 |          |          | unable to start   |
-| E_coli_GEMS          |  0:13:11 |   447512 | finished          |
-| Klebsiella_Alfred    |  0:7:23  |   27632  | unable to start   |
+| E_coli_GEMS          |    03:34 |   449064 | finished          |
+| Klebsiella_Alfred    |    01:12 |   20544  | finished          |
 
 
 Minimum-variance rooting:

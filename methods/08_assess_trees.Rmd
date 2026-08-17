@@ -60,7 +60,7 @@ SP_dates <- SP_df %>%
 
 # trees and dates (ordered by tip labels)
 SP_tree_si <- read.tree(file.path(SP_data_dir, "snippy_iqtree.newick"))
-SP_tree_si$edge.length <- SP_tree_si$edge.length * 22389 # core aln length
+SP_tree_si$edge.length <- SP_tree_si$edge.length * 22389 # variant core aln length
 SP_dates_si <- data.frame(id = SP_tree_si$tip.label) %>% as_tibble() %>% 
     left_join(SP_dates, by = c("id")) %>% deframe()
 
@@ -131,7 +131,7 @@ plot(SP_tree_sgi,no.margin=TRUE,edge.width=2,cex=0.5)
 ape::nodelabels(text=1:SP_tree_sgi$Nnode,
                 node=1:SP_tree_sgi$Nnode+ape::Ntip(SP_tree_sgi),
                 frame="none",adj=c(1.1,-0.4), cex=0.6)
-SP_nodes_to_highlight <- c(21, 126, 97, 65) # node indices from plot above, not absolute node numbers
+SP_nodes_to_highlight <- c(96, 71, 139, 23) # node indices from plot above, not absolute node numbers
 SP_sgi_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_sgi)
 SP_svi_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_svi)
 SP_sci_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight, SP_tree_sci)
@@ -141,17 +141,18 @@ SP_ff_nodes_hl <- get_matching_nodes_in_tree(SP_tree_sgi, SP_nodes_to_highlight,
 
 # unfiltered trees (only plot tree with highlighted clades, no rec to plot)
 SP_map_si <- plot_rec_map(
-    SP_tree_si, node_highlight_df=SP_si_nodes_hl, tree_scale=50,
+    SP_tree_si, node_highlight_df=SP_si_nodes_hl, tree_scale_breaks = seq(0, 2500, by=500),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_si$r2),
                               "; PHI p=0; Chi" ^ "2", " p=0")))
 SP_map_ff <- plot_rec_map(
-    SP_tree_ff, node_highlight_df=SP_ff_nodes_hl, tree_scale=150,
+    SP_tree_ff, node_highlight_df=SP_ff_nodes_hl, tree_scale_breaks = seq(0, 4000, by=1000),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_ff$r2))))
 
 # verticall reference -------------------
 SP_svi_tsv_file <- file.path(SP_data_dir, "verticall_reference/verticall_reference.tsv.xz")
 SP_svi_rec_parsed <- parse_verticall_ref_rec(
-    SP_svi_tsv_file, SP_tree_svi, node_highlight_df=SP_svi_nodes_hl, tree_scale=50,
+    SP_svi_tsv_file, SP_tree_svi, node_highlight_df=SP_svi_nodes_hl, 
+    tree_scale_breaks = seq(0, 1500, by=500),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_svi$r2),
                               "; PHI p=0; Chi" ^ "2", " p=0")))
 SP_map_svi <- SP_svi_rec_parsed$rec_plot
@@ -161,7 +162,8 @@ summarise_recs(SP_svi_rec)
 # cfml -------------------
 SP_sci_prefix <- file.path(SP_data_dir, "clonalframeml/clonalframeml")
 SP_sci_rec_parsed <- parse_cfml_rec(
-    SP_sci_prefix, SP_tree_sci, node_highlight_df=SP_sci_nodes_hl, tree_scale=2,
+    SP_sci_prefix, SP_tree_sci, node_highlight_df=SP_sci_nodes_hl, 
+    tree_scale_breaks = seq(0, 150, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_sci$r2),
                               "; PHI p=0.031; Chi" ^ "2", " p=0.023")))
 SP_map_sci <- SP_sci_rec_parsed$rec_plot
@@ -171,7 +173,8 @@ summarise_recs(SP_sci_rec)
 # gubbins  -------------------
 SP_sgi_prefix <- file.path(SP_data_dir, "gubbins/gubbins")
 SP_sgi_rec_parsed <- parse_gubbins_rec(
-    SP_sgi_prefix, SP_tree_sgi, node_highlight_df=SP_sgi_nodes_hl, tree_scale=1,
+    SP_sgi_prefix, SP_tree_sgi, node_highlight_df=SP_sgi_nodes_hl, 
+    tree_scale_breaks = seq(0, 100, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_sgi$r2),
                               "; PHI p=0.27; Chi" ^ "2", " p=0.058")))
 SP_map_sgi <- SP_sgi_rec_parsed$rec_plot
@@ -197,7 +200,7 @@ SP_vpf_rec %>%
 # plot
 SP_map_vpf <- plot_verticall_pw_map(
     SP_vpf_rec, SP_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
-    node_highlight_df=SP_vpf_nodes_hl, tree_scale=20,
+    node_highlight_df=SP_vpf_nodes_hl, tree_scale_breaks = seq(0, 100, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SP_rtt_vpf$r2))))
 
 # combine plots ###################################
@@ -221,11 +224,12 @@ SP_maps_with_unfiltered <-
       annotate_figure(SP_map_ff, fig.lab=paste("(F)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
     ) +
     plot_layout(design = c(area(1,1,11,8), area(12,1,24,8), area(25,1,37,8), 
-                           area(38,1,51,8), area(52,1,61,3), area(52,5,61,7))) +
+                           area(38,1,51,8), area(52,1,62,3), area(52,5,62,7))) +
     theme(plot.tag = element_text(size=16, face="bold"))
-ggsave(file.path(verticall_figs_dir,"Figure3_Spneumo_RecombinationMaps.svg"), 
-       width=11, height=16, plot=SP_maps_with_unfiltered, bg="white")
-
+ggsave(file.path(verticall_figs_dir,"Figure3_Spneumo_RecombinationMaps.png"), 
+       width=10, height=16, plot=SP_maps_with_unfiltered, bg="white")
+ggsave(file.path(verticall_figs_dir,"Figure3_Spneumo_RecombinationMaps.tif"), 
+       width=10, height=16, plot=SP_maps_with_unfiltered, bg="white")
 
 
 
@@ -235,16 +239,16 @@ ggsave(file.path(verticall_figs_dir,"Figure3_Spneumo_RecombinationMaps.svg"),
 # Compare to Gubbins as reference method for this within clone dataset
 
 # Example clades with differences
-# Clade 134 in SP gubbins tree is not resolved by VPf (see initial nodes plot above)
-SP_diff_node_134 <- 134 + Ntip(SP_tree_sgi) # Node 134 (absolute node = 134+154 = 288)
-SP_diff_tips_134 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_134)$tip.label
-# Clade 112 in SP gubbins tree
-SP_diff_node_112 <- 112 + Ntip(SP_tree_sgi) 
-SP_diff_tips_112 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_112)$tip.label
+# Clade 12 in SP gubbins tree is not resolved by VPf (see initial nodes plot above)
+SP_diff_node_54 <- 54 + Ntip(SP_tree_sgi) # Node 54 (absolute node = 54+154 = 288)
+SP_diff_tips_54 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_54)$tip.label
+# Clade 12 in SP gubbins tree
+SP_diff_node_12 <- 12 + Ntip(SP_tree_sgi) 
+SP_diff_tips_12 <- ape::extract.clade(SP_tree_sgi, node = SP_diff_node_12)$tip.label
 
 SP_df %<>% mutate(tips_colours = case_when(
-    id %in% SP_diff_tips_134 ~ "red",
-    id %in% SP_diff_tips_112 ~ "blue",
+    id %in% SP_diff_tips_54 ~ "red",
+    id %in% SP_diff_tips_12 ~ "blue",
     TRUE ~ "black"
 ))
 
@@ -254,7 +258,7 @@ make_tanglegram(SP_tree_sgi, SP_tree_vpf,
                 title1=wf_names["sgi"], title2=wf_names["vpf"],
                 color_by_var=T, color_df=SP_df, id_column="id", color_column="tips_colours",
                 named_var_colors = setNames(unique(SP_df$tips_colours), unique(SP_df$tips_colours)), 
-                color_branches = T, color_labels = T,
+                color_branches = T, color_labels = T, untangle = T,
                 edge.lwd = 1.5, lwd = 2, lab.cex=0.8, cex_main = 2)
 dev.off()
 
@@ -360,30 +364,33 @@ plot(SET_tree_sgi,no.margin=TRUE,edge.width=2,cex=0.5)
 ape::nodelabels(text=1:SET_tree_sgi$Nnode,
                 node=1:SET_tree_sgi$Nnode+ape::Ntip(SET_tree_sgi),
                 frame="none",adj=c(1.1,-0.4), cex=0.6)
-SET_nodes_to_highlight <- c(280, 2211, 3352) # node indices from plot above, not absolute node numbers
+SET_nodes_to_highlight <- c(32, 1736, 2851) # node indices from plot above, not absolute node numbers
 
 SET_sgi_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_sgi)
 SET_svi_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_svi)
 SET_si_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_si)
 SET_ff_nodes_hl <- get_matching_nodes_in_tree(SET_tree_sgi, SET_nodes_to_highlight, SET_tree_ff)
 
-SET_node_colors <- unname(Polychrome::light.colors(n=nrow(SET_sgi_nodes_hl)))
+SET_node_colors <- unname(Polychrome::light.colors(n=length(unique(SET_sgi_nodes_hl$node))))
+SET_node_colors <- c("yellow", "cyan", "purple")
 
 # unfiltered trees (only plot tree with highlighted clades, no rec to plot)
 SET_map_si <- plot_rec_map(
     SET_tree_si, node_highlight_df=SET_si_nodes_hl, 
-    node_highlight_color=SET_node_colors,  tree_scale=5,
+    node_highlight_color=SET_node_colors, tree_scale_breaks = seq(0, 300, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_si$r2))))
 SET_map_ff <- plot_rec_map(
     SET_tree_ff, node_highlight_df=SET_ff_nodes_hl,
-    node_highlight_color=SET_node_colors, tree_scale=50,
+    node_highlight_color=SET_node_colors, tree_scale_breaks = seq(0, 1500, by=500),
+    highlight_alpha = 0.2,
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2"," = ", .(SET_rtt_ff$r2))))
 
 # gubbins
 SET_dir_sgi <- file.path(SET_data_dir, "gubbins/")
 SET_sgi_rec_parsed <- parse_gubbins_rec(
     paste0(SET_dir_sgi,"/gubbins"), alt_tree_for_plot = SET_tree_sgi,
-    node_highlight_df=SET_sgi_nodes_hl, node_highlight_color=SET_node_colors, tree_scale=5,
+    node_highlight_df=SET_sgi_nodes_hl, node_highlight_color=SET_node_colors, 
+    tree_scale_breaks = seq(0, 250, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SET_rtt_sgi$r2))))
 SET_map_sgi <- SET_sgi_rec_parsed$rec_plot
 SET_sgi_rec <- SET_sgi_rec_parsed$rec
@@ -394,7 +401,8 @@ summarise_recs(SET_sgi_rec)
 SET_dir_svi <- file.path(SET_data_dir, "verticall_reference/")
 SET_svi_rec_parsed <- parse_verticall_ref_rec(
     file.path(SET_dir_svi,"verticall_reference.tsv.xz"), SET_tree_svi,
-    node_highlight_df=SET_svi_nodes_hl, node_highlight_color=SET_node_colors, tree_scale=5,
+    node_highlight_df=SET_svi_nodes_hl, node_highlight_color=SET_node_colors, 
+    tree_scale_breaks = seq(0, 250, by=50),
     plot_annot = bquote(paste("Root-to-tip regression, R" ^ "2", " = ", .(SET_rtt_svi$r2))))
 SET_map_svi <- SET_svi_rec_parsed$rec_plot
 SET_svi_rec <- SET_svi_rec_parsed$rec
@@ -415,7 +423,7 @@ SET_maps_with_unfiltered <-
     plot_layout(design = c(area(1,1,10,8), area(11,1,20,8),
                            area(21,1,30,3), area(21,5,30,7))) +
     theme(plot.tag = element_text(size=16, face="bold"))
-ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.svg"), 
+ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.png"), 
        width=8, height=10, plot=SET_maps_with_unfiltered, bg="white")
 
 
@@ -507,11 +515,13 @@ ECG_vpf_nodes_hl <- get_group_mrca(ECG_tree_vpf, ECG_df, "CG", "id")
 # unfiltered trees -------------------
 ECG_map_si <- plot_rec_map(
     ECG_tree_si, node_highlight_df=ECG_si_nodes_hl,
-    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, tree_scale=10, 
+    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, 
+    tree_scale_breaks = seq(0, 80000, by=20000), 
     plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="si",2]))
 ECG_map_ff <- plot_rec_map(
     ECG_tree_ff, node_highlight_df=ECG_ff_nodes_hl,
-    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, tree_scale=10,
+    node_highlight_color=ECG_CG_colors, highlight_alpha=0.8, highlight_clade_tips=F, 
+    tree_scale_breaks = seq(0, 80000, by=20000), 
     plot_annot = paste("Root-to-tip variance =",ECG_rtt_variance[ECG_rtt_variance$method=="ff",2]))
 
 # verticall reference -------------------
@@ -519,7 +529,7 @@ ECG_svi_tsv_file <- file.path(ECG_data_dir, "verticall_reference/verticall_refer
 ECG_svi_rec_parsed <- parse_verticall_ref_rec(
     ECG_svi_tsv_file, ECG_tree_svi, node_highlight_df=ECG_svi_nodes_hl, 
     node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
-    highlight_alpha=0.8, tree_scale=5000,
+    highlight_alpha=0.8, tree_scale_breaks = seq(0, 45000, by=15000),
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="svi",2]))
 ECG_map_svi <- ECG_svi_rec_parsed$rec_plot
 ECG_svi_rec <- ECG_svi_rec_parsed$rec
@@ -530,7 +540,7 @@ ECG_sci_prefix <- file.path(ECG_data_dir, "clonalframeml/clonalframeml")
 ECG_sci_rec_parsed <- parse_cfml_rec(
     ECG_sci_prefix, ECG_tree_sci, node_highlight_df=ECG_sci_nodes_hl, 
     node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
-    highlight_alpha=0.8, tree_scale=100,
+    highlight_alpha=0.8, tree_scale_breaks = seq(0, 3000, by=1000),
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sci",2]))
 ECG_map_sci <- ECG_sci_rec_parsed$rec_plot
 ECG_sci_rec <- ECG_sci_rec_parsed$rec
@@ -541,7 +551,7 @@ ECG_sgi_prefix <- file.path(ECG_data_dir, "gubbins/gubbins")
 ECG_sgi_rec_parsed <- parse_gubbins_rec(
     ECG_sgi_prefix, ECG_tree_sgi, node_highlight_df=ECG_sgi_nodes_hl, 
     node_highlight_color=ECG_CG_colors, highlight_clade_tips=F, 
-    highlight_alpha=0.8, tree_scale=500,
+    highlight_alpha=0.8, tree_scale_breaks = seq(0, 12000, by=3000),
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="sgi",2]))
 ECG_map_sgi <- ECG_sgi_rec_parsed$rec_plot
 ECG_sgi_rec <- ECG_sgi_rec_parsed$rec
@@ -568,7 +578,7 @@ ECG_map_vpf <- plot_verticall_pw_map(
     ECG_vpf_rec, ECG_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
     node_highlight_df=ECG_vpf_nodes_hl, node_highlight_color=ECG_CG_colors,
     node_highlight_legend=T, highlight_clade_tips=F, 
-    highlight_alpha=0.8, tree_scale=5000,
+    highlight_alpha=0.8, tree_scale_breaks = seq(0, 60000, by=15000),
     plot_annot = paste("Root-to-tip variance =", ECG_rtt_variance[ECG_rtt_variance$method=="vpf",2]))
 
 
@@ -666,7 +676,7 @@ ECG_tree_plots_full <- ggarrange(
     plotlist = list(ECG_tree_plot_si, ECG_tree_plot_sgi, ECG_tree_plot_svi,
                     ECG_tree_plot_ff, ECG_tree_plot_sci, ECG_tree_plot_vpf),
     common.legend = T, legend = "right")
-ECG_tree_plots_full
+# ECG_tree_plots_full
 ggsave(file.path(verticall_figs_dir, "Figure6_EcoliTrees.png"), 
        width=11, height=7, plot=ECG_tree_plots_full, bg = "white")
 ggsave(file.path(verticall_figs_dir, "Figure6_EcoliTrees.tif"), 
@@ -676,7 +686,7 @@ ggsave(file.path(verticall_figs_dir, "Figure6_EcoliTrees.tif"),
 ###################################
 # # Compare tree topologes
 ###################################
-svg(file.path(verticall_figs_dir, "FigureS3_EcoliTrees_CFMLvsVP.svg"), 
+svg(file.path(verticall_figs_dir, "FigureS3_EcoliTrees_CFMLvsVP2.svg"), 
     width = 10, height = 15)
 make_tanglegram(ECG_tree_sci, ECG_tree_vpf,
                 title1=wf_names["sci"], title2=wf_names["vpf"],
@@ -687,13 +697,18 @@ dev.off()
 
 
 ## Klebsiella_Alfred
-```{r Klebsiella_Alfred}
+```{r Klebsiella_Alfred, warning=FALSE}
 KA_data_dir <- file.path(main_dir, "data/dataset_4__Klebsiella_Alfred")
 
 KA_df <- readxl::read_xlsx(file.path(KA_data_dir, "genome_data_ka.xlsx"), skip = 1) %>% 
     rename("id" = "BioSample accession") %>% 
     mutate(Species = sub("^Klebsiella", "K. ", Species)) %>% 
-    mutate(Species = sub(" subsp ", "\nsubsp ", Species))
+    mutate(Species = if_else(grepl("quasipneumoniae", Species), 
+                             sub(" subsp ", "\nsubsp ", Species),
+                             Species))
+
+# Genome sizes per tip
+KA_tip_size_vector <- KA_df %>% select(id, Size) %>% deframe()
 
 
 KA_species <- KA_df %>% count(Species) %>% arrange(desc(n)) %>% pull(Species)
@@ -711,6 +726,9 @@ KA_tree_ff$edge.length <- KA_tree_ff$edge.length * KA_avg_g_len
 KA_tree_sci <- read.tree(file.path(KA_data_dir, "snippy_clonalframeml_iqtree.newick"))
 KA_tree_sci$edge.length <- KA_tree_sci$edge.length * 159
 
+KA_tree_svi <- read.tree(file.path(KA_data_dir, "snippy_verticall_iqtree.newick"))
+KA_tree_svi$edge.length <- KA_tree_svi$edge.length * 341133
+
 KA_tree_vpf <- read.tree(file.path(KA_data_dir, "verticall_pairwise_fastme.newick"))
 KA_tree_vpf$edge.length <- KA_tree_vpf$edge.length * KA_avg_g_len
 
@@ -721,13 +739,15 @@ KA_tree_vpf$edge.length <- KA_tree_vpf$edge.length * KA_avg_g_len
 KA_dist_si <- distRoot(KA_tree_si, tips = "all", method = c("patristic"))
 KA_dist_ff <- distRoot(KA_tree_ff, tips = "all", method = c("patristic"))
 KA_dist_sci <- distRoot(KA_tree_sci, tips = "all", method = c("patristic"))
+KA_dist_svi <- distRoot(KA_tree_svi, tips = "all", method = c("patristic"))
 KA_dist_vpf <- distRoot(KA_tree_vpf, tips = "all", method = c("patristic"))
 
 KA_rtt_variance <- data.frame(
-    method = c("si", "ff", "sci", "vpf"),
+    method = c("si", "ff", "sci", "svi", "vpf"),
     variance = c(
         sd(KA_dist_si) / mean(KA_dist_si), sd(KA_dist_ff) / mean(KA_dist_ff), 
-        sd(KA_dist_sci) / mean(KA_dist_sci), sd(KA_dist_vpf) / mean(KA_dist_vpf))
+        sd(KA_dist_sci) / mean(KA_dist_sci), sd(KA_dist_svi) / mean(KA_dist_svi),
+        sd(KA_dist_vpf) / mean(KA_dist_vpf))
 ) %>% as_tibble() %>% arrange(variance)
 KA_rtt_variance %<>% mutate(variance = round(variance,3)) 
 
@@ -741,30 +761,47 @@ KA_ff_nodes_hl <- get_group_mrca(KA_tree_ff, KA_df, "Species", "id") %>%
     mutate(Group = factor(Group, levels = KA_species))
 KA_sci_nodes_hl <- get_group_mrca(KA_tree_sci, KA_df, "Species", "id")%>% 
     mutate(Group = factor(Group, levels = KA_species))
+KA_svi_nodes_hl <- get_group_mrca(KA_tree_svi, KA_df, "Species", "id")%>% 
+    mutate(Group = factor(Group, levels = KA_species))
 KA_vpf_nodes_hl <- get_group_mrca(KA_tree_vpf, KA_df, "Species", "id")%>% 
     mutate(Group = factor(Group, levels = KA_species))
 
 # unfiltered trees -------------------
 KA_map_si <- plot_rec_map(
     KA_tree_si, node_highlight_df=KA_si_nodes_hl,
-    node_highlight_color=KA_species_colors, tree_scale=10000,
+    node_highlight_color=KA_species_colors, 
+    tree_scale_breaks = seq(0, 2000000, by=1000000),
     plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="si",2]))
 KA_map_ff <- plot_rec_map(
     KA_tree_ff, node_highlight_df=KA_ff_nodes_hl,
-    node_highlight_color=KA_species_colors, node_highlight_legend=T, tree_scale=10000,
+    node_highlight_color=KA_species_colors, node_highlight_legend=T, 
+    tree_scale_breaks = seq(0, 400000, by=200000),
     plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="ff",2])) +
-    guides(fill = guide_legend(override.aes = list(size=5, alpha=1), 
-                               theme = theme(legend.key.spacing.y =  unit(1.5, "mm"))))
+    guides(fill = guide_legend(ncol = 1, override.aes = list(alpha=1),
+                               theme = theme(legend.key.spacing.y = unit(2.5, "mm"))))
 
 # cfml -------------------
 KA_sci_prefix <- file.path(KA_data_dir, "clonalframeml/clonalframeml")
 KA_sci_rec_parsed <- parse_cfml_rec(
     KA_sci_prefix, KA_tree_sci, node_highlight_df=KA_sci_nodes_hl,
-    node_highlight_color = KA_species_colors, tree_scale=1,
+    node_highlight_color = KA_species_colors,
+    tree_scale_breaks = seq(0, 25, by=5),
     plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="sci",2]))
 KA_map_sci <- KA_sci_rec_parsed$rec_plot
 KA_sci_rec <- KA_sci_rec_parsed$rec
 summarise_recs(KA_sci_rec)
+
+# verticall reference -------------------
+KA_svi_tsv_file <- file.path(KA_data_dir, "verticall_reference/verticall_reference.tsv.xz")
+KA_svi_rec_parsed <- parse_verticall_ref_rec(
+    KA_svi_tsv_file, KA_tree_svi, node_highlight_df=KA_svi_nodes_hl, 
+    node_highlight_color=KA_species_colors, highlight_clade_tips=F, 
+    tree_scale_breaks = seq(0, 1200000, by=400000),
+    plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="svi",2]))
+KA_map_svi <- KA_svi_rec_parsed$rec_plot
+KA_svi_rec <- KA_svi_rec_parsed$rec
+summarise_recs(KA_svi_rec)
+
 
 # verticall pairwise -------------------
 KA_vpf_pairwise_tsv_df <- read_tsv(
@@ -785,21 +822,41 @@ KA_map_vpf <- plot_verticall_pw_map(
     KA_vpf_rec, KA_tree_vpf, min_pairs_per_block=vpf_rec_min_pairs,
     node_highlight_df=KA_vpf_nodes_hl, node_highlight_color=KA_species_colors,
     plot_annot = paste("Root-to-tip variance =", KA_rtt_variance[KA_rtt_variance$method=="vpf",2]),
-    plot_color_mode = "n_pairs", tree_scale=20000)
+    plot_color_mode = "n_pairs", tree_scale_breaks = seq(0, 400000, by=200000))
 
 # combine ###################################
-KA_maps_with_unfiltered <- 
+KA_maps <- 
     ( annotate_figure(KA_map_sci, fig.lab=paste("(A)", wf_names["sci"]), fig.lab.size=14, fig.lab.face="bold") |
-      annotate_figure(KA_map_vpf, fig.lab=paste("(B)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
-      annotate_figure(KA_map_si, fig.lab=paste("(C)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
-      annotate_figure(KA_map_ff, fig.lab=paste("(D)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
+      annotate_figure(KA_map_svi, fig.lab=paste("(B)", wf_names["svi"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(KA_map_vpf, fig.lab=paste("(C)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(KA_map_si, fig.lab=paste("(D)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
+      annotate_figure(KA_map_ff, fig.lab=paste("(E)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
     ) +
-    plot_layout(design = c(area(1,1,9,8), area(10,1,18,8), area(19,1,26,3), area(19,5,26,8))) +
+    plot_layout(design = c(area(1,1,8,9), area(9,1,15,9), area(16,1,24,9), area(25,1,31,3), area(25,5,31,9))) +
     theme(plot.tag = element_text(size=16, face="bold"))
 ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.png"), 
-       width=10, height=15, plot=KA_maps_with_unfiltered, bg="white")
+       width=10, height=15, plot=KA_maps, bg="white")
 ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.tif"), 
-       width=10, height=15, plot=KA_maps_with_unfiltered, bg="white")
+       width=10, height=15, plot=KA_maps, bg="white")
+
+ ######################################################################
+# Count recombinations for each species
+KA_species_tips <- split(KA_vpf_nodes_hl$tip, KA_vpf_nodes_hl$Group)
+KA_vpf_recs_summary_per_sp <- imap_dfr(KA_species_tips, function(tips, sp) {
+    KA_vpf_rec %>% filter(Node %in% tips) %>% 
+        summarise_recs() %>% 
+        mutate(blocksMedian = as.numeric(str_extract(blocks, "[0-9]+"))) %>%
+        rename(blocksSummary = blocks) %>% 
+        mutate(Species = sp, N = length(tips), .before = 1)
+})
+
+# Count recombinations for each species not shown in plot, i.e, in unaligned positions
+imap_dfr(KA_species_tips, function(tips, sp) {
+    KA_vpf_rec %>% filter(Node %in% tips) %>% 
+        reframe(total = n(), excluded_from_plot = sum(is.na(Beg))) %>% 
+        mutate(pct_excluded = round(excluded_from_plot/total*100, 1)) %>% 
+        mutate(Species = sp, N = length(tips), .before = 1)
+})
 
 ```
 
@@ -820,4 +877,6 @@ all_rtt_variance <-
 all_rtt_variance
 
 ```
+
+
 

@@ -83,17 +83,18 @@ coresnpfilter -e -c 0.95 snippy_verticall.fasta.gz | pigz -p4 > snippy_verticall
 mkdir "$base_dir"/trees/snippy_verticall_iqtree
 cd "$base_dir"/trees/snippy_verticall_iqtree
 
-/usr/bin/time -v -o snippy_verticall_iqtree.time iqtree2 -s ../../alignments/snippy_verticall_core.fasta.gz -T 32 --prefix snippy_verticall_iqtree
+/usr/bin/time -v -o snippy_verticall_iqtree.time iqtree2 -s ../../alignments/snippy_verticall_core.fasta.gz \
+    -T 32 -m GTR+G --prefix snippy_verticall_iqtree
 ```
 
 IQ-TREE resources used:
 
 | Dataset              |   Time   | RAM (kB) |      Status       |
 -----------------------------------------------------------------|
-| S_pneumo_PMEN1       |    05:44 |   174012 | finished          |
-| S_enterica_Typhi_431 |  8:00:07 |  6608592 | finished          |
-| E_coli_GEMS          |  5:52:06 |  8490004 | finished          |
-| Klebsiella_Alfred    |          |          | Could not finish  |
+| S_pneumo_PMEN1       |    02:06 |   143728 | finished          |
+| S_enterica_Typhi_431 |  2:33:00 |  7121000 | finished          |
+| E_coli_GEMS          |    43:01 |  4008040 | finished          |
+| Klebsiella_Alfred    |  5:40:21 | 24653192 | finished          |
 
 
 Minimum-variance rooting:

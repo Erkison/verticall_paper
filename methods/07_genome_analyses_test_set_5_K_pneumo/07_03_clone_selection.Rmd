@@ -73,9 +73,9 @@ selected_clones_data %<>%
 readr::write_tsv(selected_clones_summary_data,
                  file.path(project_data_dir, "selected_clones/selected_clones_summary_data.tsv"),
                  na = "")
-readr::write_tsv(selected_clones_summary_data_full,
-            file.path(project_data_dir, "selected_clones/selected_clones_summary_data_full.tsv"),
-            na = "")
+# readr::write_tsv(selected_clones_summary_data_full,
+#             file.path(project_data_dir, "selected_clones/selected_clones_summary_data_full.tsv"),
+#             na = "")
 readr::write_tsv(selected_clones_data,
             file.path(project_data_dir, "selected_clones/selected_clones_data.tsv"),
             na = "")
@@ -96,37 +96,37 @@ for (SL in selected_clones_summary_data[[clone_var]]) {
     readr::write_tsv(SL_data,
               file.path(SL_dir, paste0("SL_", SL, "_data.tsv")),
               na = "")
-    # write clone read paths
-    SL_data %>% 
-        dplyr::filter(! is.na(read_path)) %>% 
-        {
-            if (nrow(.) == nrow(SL_data)) {
-                as.data.frame(.) %>% 
-                dplyr::pull(read_path) %>%
-                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
-            } else {
-                print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing read paths"))
-                as.data.frame(.) %>% 
-                dplyr::pull(read_path) %>%
-                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
-            }
-        }
-    # write assembly paths
-    SL_data %>% 
-        dplyr::filter(! is.na(assembly_path)) %>% 
-        {
-            if (nrow(.) == nrow(SL_data)) {
-                as.data.frame(.) %>% 
-                dplyr::pull(assembly_path) %>%
-                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
-            } else {
-                
-                print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing assembly paths"))
-                as.data.frame(.) %>% 
-                dplyr::pull(assembly_path) %>%
-                readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
-            }
-        }
+    # # write clone read paths
+    # SL_data %>% 
+    #     dplyr::filter(! is.na(read_path)) %>% 
+    #     {
+    #         if (nrow(.) == nrow(SL_data)) {
+    #             as.data.frame(.) %>% 
+    #             dplyr::pull(read_path) %>%
+    #             readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
+    #         } else {
+    #             print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing read paths"))
+    #             as.data.frame(.) %>% 
+    #             dplyr::pull(read_path) %>%
+    #             readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_read_paths.txt")))
+    #         }
+    #     }
+    # # write assembly paths
+    # SL_data %>% 
+    #     dplyr::filter(! is.na(assembly_path)) %>% 
+    #     {
+    #         if (nrow(.) == nrow(SL_data)) {
+    #             as.data.frame(.) %>% 
+    #             dplyr::pull(assembly_path) %>%
+    #             readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
+    #         } else {
+    #             
+    #             print(glue::glue("Warning: {nrow(SL_data) - nrow(.)} sample(s) for Sublineage {SL} missing assembly paths"))
+    #             as.data.frame(.) %>% 
+    #             dplyr::pull(assembly_path) %>%
+    #             readr::write_lines(., file.path(SL_dir, paste0("SL_", SL, "_assembly_paths.txt")))
+    #         }
+    #     }
 }
 
 ```

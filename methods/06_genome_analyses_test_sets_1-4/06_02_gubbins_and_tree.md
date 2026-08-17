@@ -48,7 +48,7 @@ Gubbins resources used:
 
 | Dataset              |   Time    | RAM (kB) | Status          |
 ----------------------------------------------------------------|
-| S_pneumo_PMEN1       |   0:05:41 |   743388 | finished        |
+| S_pneumo_PMEN1       |     05:41 |   743388 | finished        |
 | S_enterica_Typhi_431 |  69:43:46 | 77051648 | finished        |
 | E_coli_GEMS          |   1:30:55 |  5417836 | finished        |
 | Klebsiella_Alfred    |           |          | ran out of time |
@@ -75,16 +75,16 @@ coresnpfilter -e -c 0.95 snippy_gubbins.fasta.gz | pigz -p4 > snippy_gubbins_cor
 mkdir "$base_dir"/trees/snippy_gubbins_iqtree
 cd "$base_dir"/trees/snippy_gubbins_iqtree
 
-/usr/bin/time -v -o snippy_gubbins_iqtree.time iqtree2 -s ../../alignments/snippy_gubbins_core.fasta.gz -T 32 --prefix snippy_gubbins_iqtree
+/usr/bin/time -v -o snippy_gubbins_iqtree.time iqtree2 -s ../../alignments/snippy_gubbins_core.fasta.gz -T 32 -m GTR+G --prefix snippy_gubbins_iqtree
 ```
 
 IQ-TREE resources used:
 
 | Dataset              |   Time   | RAM (kB) |      Status      |
 ----------------------------------------------------------------|
-| S_pneumo_PMEN1       |  0:06:27 |    99868 | finished         |
-| S_enterica_Typhi_431 |  8:58:50 |  6261920 | finished         |
-| E_coli_GEMS          |  0:16:49 |   935252 | finished         |
+| S_pneumo_PMEN1       |    02:14 |    77804 | finished         |
+| S_enterica_Typhi_431 |  2:15:51 |  6695892 | finished         |
+| E_coli_GEMS          |    06:27 |   968056 | finished         |
 | Klebsiella_Alfred    |          |          | unable to start  |
 
 

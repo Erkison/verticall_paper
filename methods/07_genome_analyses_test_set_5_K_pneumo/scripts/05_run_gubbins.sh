@@ -31,7 +31,7 @@ coresnpfilter -e -c 0.95 gubbins_masked_aln.fasta.gz | pigz -p4 > gubbins_masked
 # Build a tree
 /usr/bin/time -v -o gubbins_iqtree.time iqtree2 \
     -s gubbins_masked_aln_core.fasta.gz \
-    -T $THREADS --prefix gubbins_iqtree
+    -T $THREADS -m GTR+G --prefix gubbins_iqtree
 
 
 # Root tree

@@ -18,7 +18,7 @@ project_data_dir <- file.path(project_dir, "data/dataset_5__Klebsiella_pneumonia
 fnxs_dir <- file.path(project_dir, "methods/bin/")
 # read in data
 selected_clones_data <- read_tsv(
-    file.path(project_dir, "data/dataset5_K_pneumo/selected_clones/selected_clones_data.tsv"),
+    file.path(project_data_dir, "selected_clones/selected_clones_data.tsv"),
     show_col_types = F)
 
 source(file.path(fnxs_dir, "filtering_and_clone_selection_functions.R"))

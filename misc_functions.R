@@ -23,7 +23,8 @@ get_colours <- function(categories, seed_cols=c("#0571B0", "#FFBF00", "#CA0020")
 
 # modified BactDating roottotip function
 my_roottotip <- function(tree, date, rate=NA, permTest=10000, showFig=T, 
-                         colored=T, showPredInt="gamma", showText=T, showTree=T){
+                         colored=T, showPredInt="gamma", showText=T, 
+                         fullText=F, showTree=T){
     tree = ape::rtt(tree, date) # MOD. best-fit-root the tree
     if (!is.rooted(tree)) 
         warning("Warning: roottotip was called on an unrooted input tree. Consider using initRoot first.\n")
@@ -95,9 +96,12 @@ my_roottotip <- function(tree, date, rate=NA, permTest=10000, showFig=T,
                          scale = 1), lty = "dashed")
     }
     if (showText) {
-        mtext(do.call(expression, 
-                      list(bquote(paste("R" ^ "2", " = ", .(round(r2,2)))))),
-              cex=1, outer=FALSE, adj = 0)
+        if (! fullText)
+            mtext(do.call(expression, 
+                          list(bquote(paste("R" ^ "2", " = ", .(round(r2,2)))))),
+                  cex=1, outer=FALSE, adj = 0)
+        else mtext(sprintf("Rate=%.1e,MRCA=%.1f,R2=%.2f,p=%.2e", 
+                           rate, ori, r2, pvalue), outer = FALSE, cex = 0.6)
     }
     par(old.par)
     return(list(rate = rate, ori = ori, pvalue = pvalue, r2 = round(r2,2)))
@@ -155,17 +159,24 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
                          show_tips=FALSE, show_legend=FALSE,
                          node_highlight_df=NULL, node_highlight_legend=FALSE,
                          node_highlight_color=NULL, highlight_alpha=0.4, 
-                         highlight_clade_tips=TRUE, tree_scale=10,
+                         highlight_clade_tips=TRUE, 
+                         tree_scale_breaks=NULL, 
                          plot_annot=NULL, pairwise_color_mode=c("n_pairs", "opacity")){
     verticall_wf <-  match.arg(verticall_wf)
     pairwise_color_mode <-  match.arg(pairwise_color_mode)
     stopifnot(inherits(tree, "phylo"))
     
     # Plot tree
-    p_tree <- ggtree(tree, ladderize = F) + theme_void() + 
-        theme(axis.text.x = element_blank(), axis.title.x = element_blank(),
-              axis.ticks.x = element_blank(), panel.grid.major.x = element_blank(),
-              panel.grid.minor.x = element_blank(), plot.title = element_text(hjust = 0.5)) +
+    p_tree <- ggtree(tree, ladderize = F) + 
+        theme_tree2() + 
+        { if (! is.null(tree_scale_breaks) ) { 
+              scale_x_continuous(breaks = tree_scale_breaks, 
+                                 labels = scales::label_number())} 
+          else {
+              scale_x_continuous(breaks = scales::breaks_pretty(5), 
+                                 labels = scales::label_number())}
+        } +
+        theme(axis.text.x = element_text(size=10)) +
         # add annot to tree if no recombination plot
         { if (! is.null(plot_annot) & is.null(recomb_df) ) { list(
             labs(subtitle = plot_annot),
@@ -205,8 +216,8 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
         }
     }
     
-    # add tree scale after highlight to ensure it's always top layer
-    p_tree <- p_tree + geom_treescale(x=0.1, y=ape::Ntip(tree)/2, offset=2, width=tree_scale)
+    p_tree <- p_tree + 
+        scale_y_continuous(expand=expand_scale(0, 0.6)) # match discrete plot expansion
     
     # Return only tree if no rec df supplied
     if(is.null(recomb_df)) { return(p_tree) } 
@@ -217,7 +228,7 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
     
     # Re-order recombination data to match tree plot order
     rec %<>% 
-        mutate(Node = factor(Node, levels = p_tree$data$label[order(p_tree$data$y)])) %>% 
+        mutate(Node = factor(Node, levels = rev(ggtree::get_taxa_name(p_tree)))) %>% 
         mutate(across(c(Beg, End), \(x) x/1000000)) # rescale to MB
     # Plot recomb blocks (right)
     p_rec <- ggplot(rec, aes(y = Node, xmin = Beg, xmax = End)) +
@@ -229,14 +240,13 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
         stopifnot(all(c("Branch") %in% names(recomb_df)))
         p_rec <- p_rec + 
             geom_linerange(aes(color=Branch), linewidth=1.2, alpha=.95) +
-            scale_color_manual(values = c("Internal"="red", "Terminal"="blue"), 
+            scale_color_manual(values = c("Internal"="red", "Terminal"="blue"),
                                na.translate=F, na.value = "black")
     } else if (verticall_wf == "pairwise"){
         if (pairwise_color_mode == "n_pairs") {
             stopifnot(all(c("Pairs") %in% names(recomb_df)))
             p_rec <- p_rec +
                 geom_linerange(aes(color=Pairs), size=1, alpha=1) +
-                # scale_color_gradient2(low="blue", mid="yellow", high="red",
                 scale_color_gradient2(low="#F0F0F0", mid="#252525", high="#000000",
                                       midpoint = Ntip(tree)/2, name = "No. of pairs",
                                       limits = c(1,length(tree$tip.label))) +
@@ -270,7 +280,7 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
 parse_gubbins_rec <- function(gubbins_path_and_prefix, alt_tree_for_plot=NULL, show_tips=F, 
                              show_legend=T, node_highlight_df=NULL, node_highlight_legend=F,
                              node_highlight_color=NULL, highlight_alpha=0.4, 
-                             highlight_clade_tips=T, tree_scale=10, plot_annot=NULL){
+                             highlight_clade_tips=T, tree_scale_breaks=NULL, plot_annot=NULL){
     gubbins_tree_file <- paste0(gubbins_path_and_prefix, ".final_tree.tre")
     gubbins_gff_file <- paste0(gubbins_path_and_prefix, ".recombination_predictions.gff")
     # Set tree to plot
@@ -283,10 +293,16 @@ parse_gubbins_rec <- function(gubbins_path_and_prefix, alt_tree_for_plot=NULL, s
         } else { warning("Ignoring `alt_tree_for_plot` as it's not a phylo object") }
     } 
     # load gubbins data
-    gub <- RCandy::load.gubbins.GFF(gubbins_gff_file)
-    rec <- gub %>% mutate(Branch = if_else(length(gene)>1, "Internal", "Terminal")) %>% 
+    gub <- RCandy::load.gubbins.GFF(gubbins_gff_file) %>% 
+        mutate(Branch = if_else(length(gene)>1, "Internal", "Terminal"))
+    print("Gubbins per-branch recombination counts: ")
+    print(gub %>% ungroup() %>% count(Branch) %>% deframe())
+    
+    # Project rec detected in internal branches to descendant tips
+    rec <- gub %>% 
         tidyr::unnest(gene) %>% 
-        ungroup() %>% select(Node = gene, Beg = START, End = END, Branch)
+        ungroup() %>% 
+        select(Node = gene, Beg = START, End = END, Branch, eventNode = REC)
     # add in rows for any tips without recomb (terminal or internal)
     rec <- data.frame(Node=tree$tip.label) %>% as_tibble() %>% 
         left_join(rec, by = c("Node")) %>% 
@@ -296,47 +312,59 @@ parse_gubbins_rec <- function(gubbins_path_and_prefix, alt_tree_for_plot=NULL, s
         tree, rec, show_tips=show_tips, show_legend=show_legend,
         node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
         node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
-        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
+        highlight_clade_tips=highlight_clade_tips, tree_scale_breaks=tree_scale_breaks, plot_annot=plot_annot)
     return(list(rec_plot = p, rec = rec))
 }
 
 # Plot clonalframeml recombination map
-parse_cfml_rec <- function(cfml_path_and_prefix, alt_tree_for_plot=NULL, show_tips=F, 
+parse_cfml_rec <- function(cfml_path_and_prefix, alt_tree_for_plot=NULL, show_tips=F,
                           show_legend=T, node_highlight_df=NULL, node_highlight_legend=F,
-                          node_highlight_color=NULL, highlight_alpha=0.4, 
-                          highlight_clade_tips=T, tree_scale=10, plot_annot=NULL) {
+                          node_highlight_color=NULL, highlight_alpha=0.4,
+                          highlight_clade_tips=T, tree_scale_breaks=NULL, plot_annot=NULL) {
     prefix = cfml_path_and_prefix
     cfml_treefile <- paste(prefix, ".labelled_tree.newick", sep = "")
     istatefile <- paste(prefix, ".importation_status.txt", sep = "")
     tree <- read.tree(cfml_treefile)
-    all_rec <- read.table(istatefile, h = TRUE, as.is = TRUE, sep = "\t") %>% 
+    all_rec <- read.table(istatefile, h = TRUE, as.is = TRUE, sep = "\t") %>%
         mutate(Branch = if_else(Node %in% tree$tip.label, "Terminal", "Internal"))
     
-    # Apply recombination blocks detected in internal (non-terminal) nodes to all descendants
-    int_nodes <- all_rec %>% filter(!Node %in% tree$tip.label) %>% pull(Node) %>% unique()
-    desc_rec <- map_dfr(int_nodes, function(node_lab) {
-        # Get descendant tip labels for the node
-        node_idx <- which(tree$node.label == node_lab) + Ntip(tree)
-        desc_idx <- phangorn::Descendants(tree, node_idx, type = "tips")
-        desc_lab <- tree$tip.label[unlist(desc_idx)]
-        # Get recomb data for the node and project to descendants
-        node_rec <- all_rec %>% filter(Node == node_lab)
-        desc_rec <- map_dfr(1:nrow(node_rec), function(i) {
-            tibble(Node = desc_lab, Beg = rep(node_rec$Beg[i], length(desc_lab)),
-                   End = rep(node_rec$End[i], length(desc_lab)),
-                   Branch = rep(node_rec$Branch[i], length(desc_lab)))
-        })
-        return(desc_rec)
-    })
-    # final rec with only tips and internal/terminal bracnh recombination
-    rec <- all_rec %>% 
-        filter(Node %in% tree$tip.label) %>% # tips (terminal branches) with recombination
-        bind_rows(desc_rec) # tips with ancenstral recombination added
+    print("CFML per-branch recombination counts: ")
+    print(all_rec %>% count(Branch) %>% deframe)
+
+    terminal_rec <- all_rec %>% filter(Node %in% tree$tip.label) %>% 
+        mutate(eventNode = Node)
+    internal_rec <- all_rec %>% filter(!Node %in% tree$tip.label)
+
+    # Apply recombination blocks detected in internal (non-terminal) nodes to all descendant tips
+    if (nrow(internal_rec) > 0) {
+        node_map <- tibble(Node = tree$node.label,
+                           node_idx = seq_along(tree$node.label) + Ntip(tree)) %>%
+            filter(!is.na(Node) & Node != "") %>%
+            mutate(
+                Tip = map(node_idx, ~ tree$tip.label[phangorn::Descendants(
+                    tree, .x, type = "tips")[[1]]])
+            ) %>%
+            unnest(cols = c(Tip))
+
+        # Project internal events to descendant tips
+        desc_rec <- internal_rec %>%
+            inner_join(node_map, by = "Node", relationship = "many-to-many") %>%
+            # Retain original ancestral node label for tracing
+            mutate(eventNode = Node, Node = Tip) %>%
+            select(-c(Tip, node_idx))
+    } else {
+        desc_rec <- tibble()
+    }
+    # final rec with only tips (with internal/terminal bracnh recombination)
+    rec <- bind_rows(
+        terminal_rec, # tips (terminal branches) with recombination
+        desc_rec # tips with ancenstral recombination added
+    )
     # add in rows for any tips without recomb (terminal or internal)
-    rec <- data.frame(Node=tree$tip.label) %>% as_tibble() %>% 
-        left_join(rec, by = c("Node")) %>% 
+    rec <- tibble(Node = tree$tip.label) %>% 
+        left_join(rec, by = c("Node")) %>%
         mutate(blockSize = End - Beg)
-    
+
     # Set tree to plot
     if(!is.null(alt_tree_for_plot)){
         if(inherits(alt_tree_for_plot, "phylo")){
@@ -344,22 +372,23 @@ parse_cfml_rec <- function(cfml_path_and_prefix, alt_tree_for_plot=NULL, show_ti
                 tree <- alt_tree_for_plot
             } else { warning("Ignoring `alt_tree_for_plot` as does not contain same tips as CFML tree") }
         } else { warning("Ignoring `alt_tree_for_plot` as it's not a phylo object") }
-    } 
-    
+    }
+
     # Plot
     p <- plot_rec_map(
         tree, rec, show_tips=show_tips, show_legend=show_legend,
         node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
-        node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
-        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
+        node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha,
+        highlight_clade_tips=highlight_clade_tips, tree_scale_breaks=tree_scale_breaks, plot_annot=plot_annot)
     return(list(rec_plot = p, rec = rec))
 }
+
 
 # Plot verticall ref recombination map
 parse_verticall_ref_rec <- function(vert_tsv_file, vert_tree, show_tips=F, show_legend=T,
                                    node_highlight_df=NULL, node_highlight_legend=F,
                                    node_highlight_color=NULL, highlight_alpha=0.4, 
-                                   highlight_clade_tips=T, tree_scale=10, plot_annot=NULL){
+                                   highlight_clade_tips=T, tree_scale_breaks=NULL, plot_annot=NULL){
     vert_tsv <- read_tsv(vert_tsv_file, show_col_types = F)
     rec <- vert_tsv %>% 
         filter(result_level %in% c("primary")) %>% 
@@ -367,7 +396,8 @@ parse_verticall_ref_rec <- function(vert_tsv_file, vert_tree, show_tips=F, show_
         separate_longer_delim(cols = assembly_a_horizontal_regions, delim = ",") %>% 
         filter(!is.na(assembly_a_horizontal_regions)) %>% 
         separate_wider_regex(
-            assembly_a_horizontal_regions, patterns = c(".*:", Beg = "[[:alnum:]]+", "-", End = "[[:alnum:]]+$"),
+            assembly_a_horizontal_regions, 
+            patterns = c(".*:", Beg = "[[:alnum:]]+", "-", End = "[[:alnum:]]+$"),
             too_few = "align_start", cols_remove = F) %>% 
         select(Node = assembly_b, Beg, End) %>% 
         mutate(across(c(Beg, End), as.numeric)) %>% 
@@ -382,7 +412,7 @@ parse_verticall_ref_rec <- function(vert_tsv_file, vert_tree, show_tips=F, show_
         tree, rec, show_tips=show_tips, show_legend=show_legend,
         node_highlight_df=node_highlight_df, node_highlight_legend=node_highlight_legend,
         node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha, 
-        highlight_clade_tips=highlight_clade_tips, tree_scale=tree_scale, plot_annot=plot_annot)
+        highlight_clade_tips=highlight_clade_tips, tree_scale_breaks=tree_scale_breaks, plot_annot=plot_annot)
     
     return(list(rec_plot = p, rec = rec))
 }
@@ -419,9 +449,11 @@ parse_verticall_pairwise_rec <- function(verticall_pw_tsv_df, ref_pos_to_contig_
         separate_longer_delim(cols = assembly_a_horizontal_regions, delim = ",") %>% 
         separate_wider_regex(
             assembly_a_horizontal_regions, 
-            patterns = c(blockContig="[0-9]+", ":", blockStart="[0-9]+", "-", 
+            # patterns = c(blockContig="[0-9]+", ":", blockStart="[0-9]+", "-",
+            #              blockEnd="[0-9]+"),
+            patterns = c(blockContig="^[^:]+", ":", blockStart="[0-9]+", "-",
                          blockEnd="[0-9]+"),
-            cols_remove = T) %>% 
+            too_few = "align_start", cols_remove = T) %>% 
         mutate(across(c(blockStart, blockEnd), \(x) as.numeric(x))) %>%
         mutate(blockSize = blockEnd - blockStart + 1) %>% 
         # remove pairs without horizontal regions
@@ -507,7 +539,7 @@ plot_verticall_pw_map <- function(recomb_df, vert_pw_tree, show_tips=F, show_leg
                                   min_pairs_per_block=1, node_highlight_df=NULL,
                                   node_highlight_legend=F, node_highlight_color=NULL, 
                                   highlight_alpha=0.4, highlight_clade_tips=T, 
-                                  tree_scale=10, plot_annot=NULL){
+                                  tree_scale_breaks=NULL, plot_annot=NULL){
     plot_color_mode <- match.arg(plot_color_mode)
     # use `n_pairs` for plotting distinct recs after merging
     if (plot_color_mode == "n_pairs") {
@@ -530,15 +562,15 @@ plot_verticall_pw_map <- function(recomb_df, vert_pw_tree, show_tips=F, show_leg
                  node_highlight_legend=node_highlight_legend,
                  node_highlight_color=node_highlight_color, highlight_alpha=highlight_alpha,
                  highlight_clade_tips=highlight_clade_tips,
-                 tree_scale=tree_scale, plot_annot=plot_annot,
+                 tree_scale_breaks=tree_scale_breaks, plot_annot=plot_annot,
                  pairwise_color_mode = plot_color_mode)
 }
 
 summarise_recs <- function(rec){
     rec %>% reframe(md = median(blockSize, na.rm=T),
-                           low = quantile(blockSize, 0.25, na.rm=T),
-                           upp = quantile(blockSize, 0.75, na.rm=T),
-                           rng = paste0(range(blockSize, na.rm=T), collapse="-")) %>% 
+                    low = quantile(blockSize, 0.25, na.rm=T),
+                    upp = quantile(blockSize, 0.75, na.rm=T),
+                    rng = paste0(range(blockSize, na.rm=T), collapse="-")) %>% 
         mutate(blockSize = sprintf('%.0f [IQR: %.0f-%.0f, range: %s]', md, low, upp, rng)) %>% 
         select(blockSize) %>% 
         bind_cols(
