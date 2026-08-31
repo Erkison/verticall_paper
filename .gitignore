@@ -13,3 +13,5 @@ data/
 figures/*.tif
 figures/*.svg
 figures/*.pdf
+figures/FigureSX*
+figures/*.pptx

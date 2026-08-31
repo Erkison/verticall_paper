@@ -118,9 +118,9 @@ SP_plots_full <- ggarrange(
         labels=c(paste("(E)", wf_names["svi"]), "", paste("(F)", wf_names["vpf"]))),
     nrow=5, ncol=1, heights = c(1,0.25,1,0.25,1)
 )
-ggsave(file.path(verticall_figs_dir,"FigureS5_SpneumoRTT.png"), 
+ggsave(file.path(verticall_figs_dir,"FigureS6_SpneumoRTT.png"), 
        width=12, height=10, plot=SP_plots_full, create.dir = T)
-ggsave(file.path(verticall_figs_dir,"FigureS5_SpneumoRTT.tif"), 
+ggsave(file.path(verticall_figs_dir,"FigureS6_SpneumoRTT.tif"), 
        width=12, height=10, plot=SP_plots_full)
 
 ###################################
@@ -350,9 +350,9 @@ SET_plots_full <- ggarrange(
         labels=c(paste("(C)", wf_names["svi"]), "", paste("(D)", wf_names["sgi"]))),
     nrow=3, ncol=1, heights = c(1,0.25,1)
 )
-ggsave(file.path(verticall_figs_dir,"FigureS6_SentericaRTT.png"),
+ggsave(file.path(verticall_figs_dir,"FigureS7_SentericaRTT.png"),
        width=12, height=7, plot=SET_plots_full)
-ggsave(file.path(verticall_figs_dir,"FigureS6_SentericaRTT.tif"),
+ggsave(file.path(verticall_figs_dir,"FigureS7_SentericaRTT.tif"),
        width=12, height=7, plot=SET_plots_full)
 
 
@@ -702,7 +702,7 @@ KA_data_dir <- file.path(main_dir, "data/dataset_4__Klebsiella_Alfred")
 
 KA_df <- readxl::read_xlsx(file.path(KA_data_dir, "genome_data_ka.xlsx"), skip = 1) %>% 
     rename("id" = "BioSample accession") %>% 
-    mutate(Species = sub("^Klebsiella", "K. ", Species)) %>% 
+    mutate(Species = sub("^Klebsiella", "K.", Species)) %>% 
     mutate(Species = if_else(grepl("quasipneumoniae", Species), 
                              sub(" subsp ", "\nsubsp ", Species),
                              Species))
@@ -834,9 +834,9 @@ KA_maps <-
     ) +
     plot_layout(design = c(area(1,1,8,9), area(9,1,15,9), area(16,1,24,9), area(25,1,31,3), area(25,5,31,9))) +
     theme(plot.tag = element_text(size=16, face="bold"))
-ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.png"), 
+ggsave(file.path(verticall_figs_dir,"FigureS5_KlebsAlfred_RecombinationMaps.png"), 
        width=10, height=15, plot=KA_maps, bg="white")
-ggsave(file.path(verticall_figs_dir,"FigureS4_KlebsAlfred_RecombinationMaps.tif"), 
+ggsave(file.path(verticall_figs_dir,"FigureS5_KlebsAlfred_RecombinationMaps.tif"), 
        width=10, height=15, plot=KA_maps, bg="white")
 
  ######################################################################
@@ -858,6 +858,7 @@ imap_dfr(KA_species_tips, function(tips, sp) {
         mutate(Species = sp, N = length(tips), .before = 1)
 })
 
+
 ```
 
 
@@ -875,6 +876,116 @@ all_rtt_variance <-
     mutate(Workflow = wf_names[Workflow])
 
 all_rtt_variance
+
+```
+
+```{r sim_data}
+sim_dir <- file.path(main_dir,"NOT_SHARED/simulation/rec0.0001")
+# R = 0.0001: 339468 sites recombinant, 2660532 sites left in alignment
+
+############################
+# underlying clonal trees; note branches are in coal time unit
+mut1_tree <- read.tree(file.path(sim_dir,"mut_rate_0.1/clonal.nwk"))
+mut01_tree <- read.tree(file.path(sim_dir,"mut_rate_0.01/clonal.nwk"))
+mut001_tree <- read.tree(file.path(sim_dir,"mut_rate_0.001/clonal.nwk"))
+mut0001_tree <- read.tree(file.path(sim_dir,"mut_rate_0.0001/clonal.nwk"))
+# rename
+mut1_tree$tip.label <- paste0("sample", mut1_tree$tip.label)
+mut01_tree$tip.label <- paste0("sample", mut01_tree$tip.label)
+mut001_tree$tip.label <- paste0("sample", mut001_tree$tip.label)
+mut0001_tree$tip.label <- paste0("sample", mut0001_tree$tip.label)
+
+
+############################
+# reconstructed clonal trees after simulated rec regions excluded
+mut1_tree_2 <- read.tree(file.path(sim_dir,"mut_rate_0.1/filtered_alignment.newick"))
+mut01_tree_2 <- read.tree(file.path(sim_dir,"mut_rate_0.01/filtered_alignment.newick"))
+mut001_tree_2 <- read.tree(file.path(sim_dir,"mut_rate_0.001/filtered_alignment.newick"))
+mut0001_tree_2 <- read.tree(file.path(sim_dir,"mut_rate_0.0001/filtered_alignment.newick"))
+# rename
+mut1_tree_2$tip.label <- paste0("sample", mut1_tree_2$tip.label)
+mut01_tree_2$tip.label <- paste0("sample", mut01_tree_2$tip.label)
+mut001_tree_2$tip.label <- paste0("sample", mut001_tree_2$tip.label)
+mut0001_tree_2$tip.label <- paste0("sample", mut0001_tree_2$tip.label)
+# root
+mut1_tree_2 <- phangorn::midpoint(mut1_tree_2)
+mut01_tree_2 <- phangorn::midpoint(mut01_tree_2)
+mut001_tree_2 <- phangorn::midpoint(mut001_tree_2)
+mut0001_tree_2 <- phangorn::midpoint(mut0001_tree_2)
+
+############################
+# reconstructed clonal trees with verticall; note branches are in nucl diff
+mut1_tree_VD <- read.tree(file.path(sim_dir,"mut_rate_0.1/verticall_pairwise/verticall_pairwise.newick"))
+mut01_tree_VD <- read.tree(file.path(sim_dir,"mut_rate_0.01/verticall_pairwise/verticall_pairwise.newick"))
+mut001_tree_VD <- read.tree(file.path(sim_dir,"mut_rate_0.001/verticall_pairwise/verticall_pairwise.newick"))
+mut0001_tree_VD <- read.tree(file.path(sim_dir,"mut_rate_0.0001/verticall_pairwise/verticall_pairwise.newick"))
+# rescale reconstructed clonal trees branch lengths to number of subst (aln length = 3000000)
+mut1_tree_VD$edge.length <- mut1_tree_VD$edge.length * 3000000 # simulated aln lenght
+mut01_tree_VD$edge.length <- mut01_tree_VD$edge.length * 3000000
+mut001_tree_VD$edge.length <- mut001_tree_VD$edge.length * 3000000
+mut0001_tree_VD$edge.length <- mut0001_tree_VD$edge.length * 3000000
+# root
+mut1_tree_VD <- phangorn::midpoint(mut1_tree_VD)
+mut01_tree_VD <- phangorn::midpoint(mut01_tree_VD)
+mut001_tree_VD <- phangorn::midpoint(mut001_tree_VD)
+mut0001_tree_VD <- phangorn::midpoint(mut0001_tree_VD)
+
+############################
+# plot topologies
+{make_tanglegram(mut1_tree_2, mut1_tree_VD, 
+                 title1="Simulated (T = 0.1)", title2="Verticall distance",
+                 untangle = T, line_color = '#1F78B4', color_branches=F,
+                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 1.3);
+    mut1_plot <- recordPlot() }
+{make_tanglegram(mut01_tree_2, mut01_tree_VD, 
+                 title1="Simulated (T = 0.01)", title2="Verticall distance",
+                 untangle = T, line_color = '#1F78B4', color_branches=F,
+                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 1.3);
+    mut01_plot <- recordPlot() }
+{make_tanglegram(mut001_tree_2, mut001_tree_VD, 
+                 title1="Simulated (T = 0.001)", title2="Verticall distance",
+                 untangle = T, line_color = '#1F78B4', color_branches=F,
+                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 1.3);
+    mut001_plot <- recordPlot() }
+{make_tanglegram(mut0001_tree_2, mut0001_tree_VD, 
+                 title1="Simulated (T = 0.0001)", title2="Verticall distance",
+                 untangle = T, line_color = '#1F78B4', color_branches=F,
+                 edge.lwd = 1.7, lwd = 2, lab.cex = 0.001, cex_main = 1.3);
+    mut0001_plot <- recordPlot() }
+
+save_svg <- function(filename=NULL, plot=NULL, width=4, height=4){
+    svg(filename, width=width, height=height)
+    print(plot)
+    dev.off()
+}
+save_svg(file.path(verticall_figs_dir,"FigureSX4A_SimMut1.svg"), plot = mut1_plot)
+save_svg(file.path(verticall_figs_dir,"FigureSX4B_SimMut01.svg"), plot = mut01_plot)
+save_svg(file.path(verticall_figs_dir,"FigureSX4C_SimMut001.svg"), plot = mut001_plot)
+save_svg(file.path(verticall_figs_dir,"FigureSX4D_SimMut0001.svg"), plot = mut0001_plot)
+
+############################
+# compare tree topologes - RF distance 
+mut_rf_dists <- c(
+  phangorn::RF.dist(mut1_tree_2, mut1_tree_VD),
+  phangorn::RF.dist(mut01_tree_2, mut01_tree_VD),
+  phangorn::RF.dist(mut001_tree_2, mut001_tree_VD),
+  phangorn::RF.dist(mut0001_tree_2, mut0001_tree_VD)
+) %>% matrix(ncol = 1) 
+rownames(mut_rf_dists) <- c("T = 0.1", "T = 0.01", "T = 0.001", "T = 0.0001")
+colnames(mut_rf_dists) <- c("RF_distance")
+mut_rf_dists
+
+# compare tree topologes and branch lengths - weighted RF distance 
+mut_wrf_dists <- c(
+  phangorn::wRF.dist(mut1_tree_2, mut1_tree_VD, normalize = TRUE),
+  phangorn::wRF.dist(mut01_tree_2, mut01_tree_VD, normalize = TRUE),
+  phangorn::wRF.dist(mut001_tree_2, mut001_tree_VD, normalize = TRUE),
+  phangorn::wRF.dist(mut0001_tree_2, mut0001_tree_VD, normalize = TRUE)
+) %>% round(3) %>% matrix(ncol = 1) 
+rownames(mut_wrf_dists) <- c("T = 0.1", "T = 0.01", "T = 0.001", "T = 0.0001")
+colnames(mut_wrf_dists) <- c("wRF_distance")
+mut_wrf_dists
+
 
 ```
 

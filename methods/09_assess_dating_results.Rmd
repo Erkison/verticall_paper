@@ -174,7 +174,9 @@ all_years_plot <- all_years_df %>%
     labs(x="Year", title=NULL) +
     theme_minimal() + # custom_plots_theme +
     theme(axis.text.x = element_text(angle=45,vjust=1, hjust=1))
-ggsave(file=file.path(comp_figs_dir, "FigureS8_YearDistribution.png"),
+ggsave(file=file.path(comp_figs_dir, "FigureS9_YearDistribution.png"),
+       plot=all_years_plot, width=10, height=12, bg='white')
+ggsave(file=file.path(comp_figs_dir, "FigureS9_YearDistribution.tif"),
        plot=all_years_plot, width=10, height=12, bg='white')
 
 # all_years_plot
@@ -292,9 +294,9 @@ kpn_bd_pred_plots <- ggarrange(
     ncol=1, align="hv", common.legend=T, legend="right", labels=c("(A)", "(B)", "(C)"))
 
 
-ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.png"), 
+ggsave(file=file.path(comp_figs_dir, "FigureS8_ConvergencePredictorsBoxplot.png"), 
        plot=kpn_bd_pred_plots, width=9, height=9, bg = 'white')
-ggsave(file=file.path(comp_figs_dir, "FigureS7_ConvergencePredictorsBoxplot.tif"), 
+ggsave(file=file.path(comp_figs_dir, "FigureS8_ConvergencePredictorsBoxplot.tif"), 
        plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
 ```
 
@@ -688,12 +690,6 @@ SP_bd_mrca_plot <- SP_bd_df %>%
     guides(color="none") 
 
 SP_bd_plots <- ggarrange(SP_bd_mu_plot, SP_bd_mrca_plot, align = "h")
-
-# ggsave(file=file.path(comp_figs_dir, "FigureS7_BactDateEstimatesSpn.png"), 
-#        plot=SP_bd_plots, width=12, height=4, bg = 'white')
-# ggsave(file=file.path(comp_figs_dir, "FigureS7_BactDateEstimatesSpn.tif"), 
-#        plot=SP_bd_plots, width=12, height=4, bg = 'white')
-
 
 SP_bd_plots_with_performance <- (
     wrap_elements(SP_bd_mu_plot | SP_bd_mrca_plot) + 
