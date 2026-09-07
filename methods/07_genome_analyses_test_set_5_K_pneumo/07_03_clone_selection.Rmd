@@ -59,7 +59,7 @@ filtered_clones_data_lst <-
                              min_k_loci_per_clone = 1, min_year_span = 10)
 
 selected_clones_summary_data <- filtered_clones_data_lst$selected_clones_summary_data
-selected_clones_summary_data_full <- filtered_clones_data_lst$selected_clones_summary_data_full
+# selected_clones_summary_data_full <- filtered_clones_data_lst$selected_clones_summary_data_full
 selected_clones_data <- filtered_clones_data_lst$selected_clones_data
 
 # Add assembly id to selected clones data

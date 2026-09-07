@@ -880,7 +880,7 @@ all_rtt_variance
 ```
 
 ```{r sim_data}
-sim_dir <- file.path(main_dir,"NOT_SHARED/simulation/rec0.0001")
+sim_dir <- file.path(main_dir,"data/simbac/")
 # R = 0.0001: 339468 sites recombinant, 2660532 sites left in alignment
 
 ############################
