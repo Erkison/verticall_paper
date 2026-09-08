@@ -469,7 +469,7 @@ comp_plots <- (
 ggsave(file=file.path(comp_figs_dir, "Figure8_BactDateEstimatesKpn.png"),
        plot=comp_plots, width=12, height=15, bg = 'white')
 ggsave(file=file.path(comp_figs_dir, "Figure8_BactDateEstimatesKpn.tif"),
-       plot=comp_plots, width=12, height=12, bg = 'white')
+       plot=comp_plots, width=12, height=15, bg = 'white')
 
 comp_plots
 ```

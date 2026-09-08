@@ -425,6 +425,8 @@ SET_maps_with_unfiltered <-
     theme(plot.tag = element_text(size=16, face="bold"))
 ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.png"), 
        width=8, height=10, plot=SET_maps_with_unfiltered, bg="white")
+ggsave(file.path(verticall_figs_dir,"Figure4_Senterica_RecombinationMaps.tif"), 
+       width=8, height=10, plot=SET_maps_with_unfiltered, bg="white")
 
 
 ###################################

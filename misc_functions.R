@@ -249,7 +249,7 @@ plot_rec_map <- function(tree, recomb_df=NULL, verticall_wf=c("reference", "pair
                 geom_linerange(aes(color=Pairs), size=1, alpha=1) +
                 scale_color_gradient2(low="#F0F0F0", mid="#252525", high="#000000",
                                       midpoint = Ntip(tree)/2, name = "No. of pairs",
-                                      limits = c(1,length(tree$tip.label))) +
+                                      limits = c(1,Ntip(tree))) +
                 theme(legend.key.width = unit(0.07, 'npc'))
         } else {
             p_rec <- p_rec + geom_linerange(color="black", size=1, alpha=.1)
@@ -424,7 +424,7 @@ parse_verticall_pairwise_rec <- function(verticall_pw_tsv_df, ref_pos_to_contig_
         separate_wider_regex(
             alignment_coordinates, 
             patterns = c(
-                "[[:alnum:]]+:", 
+                "^[^:]+:", 
                 alnRefStart = "[0-9]+", # ref start pos relative to aligned contig
                 "-", 
                 alnRefEnd = "[0-9]+", # ref end pos relative to aligned contig
@@ -433,7 +433,7 @@ parse_verticall_pairwise_rec <- function(verticall_pw_tsv_df, ref_pos_to_contig_
                 alnContigStart = "[0-9]+", # contig start pos relative to ref
                 "-",
                 alnContigEnd = "[0-9]+", # contig end pos relative to ref
-                " \\(", ident = "[0-9]+.[0-9]+", "%\\) ", matches="[0-9]+$"), 
+                " \\(", ident = "[0-9]+.[0-9]+", "%\\) ", matches="[0-9]+"), 
             too_few = "align_start", cols_remove = TRUE) %>% 
         mutate(across(c(alnRefStart, alnRefEnd, alnContigStart, alnContigEnd, ident, matches), 
                       \(x) as.numeric(x))) %>% 
@@ -554,9 +554,8 @@ plot_verticall_pw_map <- function(recomb_df, vert_pw_tree, show_tips=F, show_leg
     }
     # add in rows for any samples without recombination
     rec <- data.frame(Node=vert_pw_tree$tip.label) %>% as_tibble() %>% 
-        left_join(rec, by = c("Node")) %>% 
-        filter(!is.na(Beg)) # remove blocks outside reference-aligned regions
-
+        left_join(rec, by = c("Node")) #%>% 
+        #filter(!is.na(Beg)) # remove blocks outside reference-aligned regions
     plot_rec_map(vert_pw_tree, rec, show_tips=show_tips, verticall_wf="pairwise", 
                  show_legend=show_legend, node_highlight_df=node_highlight_df,
                  node_highlight_legend=node_highlight_legend,
