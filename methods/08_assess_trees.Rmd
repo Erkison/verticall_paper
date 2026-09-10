@@ -598,20 +598,6 @@ ggsave(file.path(verticall_figs_dir,"Figure5_Ecoli_RecombinationMaps.png"),
 ggsave(file.path(verticall_figs_dir,"Figure5_Ecoli_RecombinationMaps.tif"),
        width=11, height=14, plot=ECG_maps, bg="white")
 
-# ECG_maps_with_unfiltered <- 
-#     ( annotate_figure(ECG_map_svi, fig.lab=paste("(A)", wf_names["svi"]), fig.lab.size=14, fig.lab.face="bold") | 
-#       annotate_figure(ECG_map_sci, fig.lab=paste("(B)", wf_names["sci"]), fig.lab.size=14, fig.lab.face="bold") | 
-#       annotate_figure(ECG_map_sgi, fig.lab=paste("(C)", wf_names["sgi"]), fig.lab.size=14, fig.lab.face="bold") | 
-#       annotate_figure(ECG_map_vpf, fig.lab=paste("(D)", wf_names["vpf"]), fig.lab.size=14, fig.lab.face="bold") | 
-#       annotate_figure(ECG_map_si, fig.lab=paste("(E)", wf_names["si"]), fig.lab.size=14, fig.lab.face="bold") | 
-#       annotate_figure(ECG_map_ff, fig.lab=paste("(F)", wf_names["ff"]), fig.lab.size=14, fig.lab.face="bold")
-#     ) +
-#     plot_layout(design = c(area(1,1,11,8), area(12,1,24,8), area(25,1,37,8), 
-#                            area(38,1,49,8), area(50,1,59,3), area(50,5,59,7))) +
-#     theme(plot.tag = element_text(size=16, face="bold"))
-# ggsave(file.path(verticall_figs_dir,"FigureSX_Ecoli_RecombinationMaps.png"), 
-#        width=11, height=16, plot=ECG_maps_with_unfiltered, bg="white")
-
 
 ###################################
 # Between vs within clonal group distances
