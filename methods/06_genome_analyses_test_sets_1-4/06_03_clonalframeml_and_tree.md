@@ -75,6 +75,9 @@ IQ-TREE resources used:
 | E_coli_GEMS          |    03:34 |   449064 | finished          |
 | Klebsiella_Alfred    |    01:12 |   20544  | finished          |
 
+```R
+round( c(82944, NA, 449064, 20544) / (1024*1024), 1) # convert to GB
+```
 
 Minimum-variance rooting:
 ```bash

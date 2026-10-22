@@ -201,6 +201,9 @@ IQ-TREE resources used:
 
 I gave each command one week to run, and if it wasn't done then, I killed it.
 
+```R
+round( c(190012, 7106608, 4245712, 31696888) / (1024*1024), 1) # convert to GB
+```
 
 Minimum-variance rooting:
 ```bash

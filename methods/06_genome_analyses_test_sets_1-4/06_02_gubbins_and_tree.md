@@ -87,6 +87,9 @@ IQ-TREE resources used:
 | E_coli_GEMS          |    06:27 |   968056 | finished         |
 | Klebsiella_Alfred    |          |          | unable to start  |
 
+```R
+round( c(77804, 6695892, 968056, NA) / (1024*1024), 1) # convert to GB
+```
 
 ```bash
 cd "$base_dir"/trees

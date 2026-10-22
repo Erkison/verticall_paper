@@ -42,7 +42,7 @@ Verticall resources used (time is the sum of pairwise and matrix, RAM is the lar
 | Klebsiella_Alfred    |  26:22:41 |   1331544 | finished          |
 
 ```R
-round( c(320460, 963404, 1331544) / (1024*1024), 1) # convert to GB
+round( c(320460, NA, 963404, 1331544) / (1024*1024), 1) # convert to GB
 ```
 
 
@@ -65,6 +65,9 @@ FastME resources used:
 | E_coli_GEMS          |     0:04 |   238336 | finished          |
 | Klebsiella_Alfred    |     0:10 |   243652 | finished          |
 
+```R
+round( c(242100, NA, 238336, 243652) / (1024*1024), 1) # convert to GB
+```
 
 # Get reference positions for each genome
 ```bash
