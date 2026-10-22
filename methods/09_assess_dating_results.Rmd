@@ -174,9 +174,9 @@ all_years_plot <- all_years_df %>%
     labs(x="Year", title=NULL) +
     theme_minimal() + # custom_plots_theme +
     theme(axis.text.x = element_text(angle=45,vjust=1, hjust=1))
-ggsave(file=file.path(comp_figs_dir, "FigureS9_YearDistribution.png"),
+ggsave(file=file.path(comp_figs_dir, "FigureS10_YearDistribution.png"),
        plot=all_years_plot, width=10, height=12, bg='white')
-ggsave(file=file.path(comp_figs_dir, "FigureS9_YearDistribution.tif"),
+ggsave(file=file.path(comp_figs_dir, "FigureS10_YearDistribution.tif"),
        plot=all_years_plot, width=10, height=12, bg='white')
 
 # all_years_plot
@@ -294,9 +294,9 @@ kpn_bd_pred_plots <- ggarrange(
     ncol=1, align="hv", common.legend=T, legend="right", labels=c("(A)", "(B)", "(C)"))
 
 
-ggsave(file=file.path(comp_figs_dir, "FigureS8_ConvergencePredictorsBoxplot.png"), 
+ggsave(file=file.path(comp_figs_dir, "FigureS9_ConvergencePredictorsBoxplot.png"), 
        plot=kpn_bd_pred_plots, width=9, height=9, bg = 'white')
-ggsave(file=file.path(comp_figs_dir, "FigureS8_ConvergencePredictorsBoxplot.tif"), 
+ggsave(file=file.path(comp_figs_dir, "FigureS9_ConvergencePredictorsBoxplot.tif"), 
        plot=kpn_bd_pred_plots, width=9, height=7, bg = 'white')
 ```
 
@@ -331,7 +331,7 @@ neg_root_dates %>% filter(Sublineage %in% converged_SLs_all_workflows)
 
 # Converged runs
 kp_bd_results_converged <- kp_bd_results_long %>% 
-    filter(! Sublineage %in% neg_root_dates$Sublineage) %>% 
+    # filter(! Sublineage %in% neg_root_dates$Sublineage) %>% 
     filter(Sublineage %in% converged_SLs_all_workflows)
 
 SL_order <- kp_bd_results_converged %>%  filter(method =="GB") %>% arrange(mu) %>% pull(Sublineage)
@@ -545,6 +545,7 @@ mu_icc_plot <- {
 mu_icc_df %<>% mutate(ICC = sprintf('%.2f [%.2f-%.2f]', ICC, ICC_lower, ICC_upper)) %>% 
     select(-c(ICC_lower, ICC_upper))
 
+mu_icc_df
 # write.table(mu_icc_df, file.path(main_dir, "tables", "TableSX_SubstitutionRateAgreement.tsv"),
 #             sep='\t', row.names=F, na='')
 ```
@@ -612,6 +613,7 @@ rd_icc_plot <- {
 rd_icc_df %<>% mutate(ICC = sprintf('%.2f [%.2f-%.2f]', ICC, ICC_lower, ICC_upper)) %>% 
     select(-c(ICC_lower, ICC_upper))
 
+rd_icc_df
 # write.table(rd_icc_df, file.path(main_dir, "tables", "TableSX_RootDateAgreement.tsv"),
 #             sep='\t', row.names=F, na='')
 ```

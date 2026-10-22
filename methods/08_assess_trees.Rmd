@@ -118,9 +118,9 @@ SP_plots_full <- ggarrange(
         labels=c(paste("(E)", wf_names["svi"]), "", paste("(F)", wf_names["vpf"]))),
     nrow=5, ncol=1, heights = c(1,0.25,1,0.25,1)
 )
-ggsave(file.path(verticall_figs_dir,"FigureS6_SpneumoRTT.png"), 
+ggsave(file.path(verticall_figs_dir,"FigureS7_SpneumoRTT.png"), 
        width=12, height=10, plot=SP_plots_full, create.dir = T)
-ggsave(file.path(verticall_figs_dir,"FigureS6_SpneumoRTT.tif"), 
+ggsave(file.path(verticall_figs_dir,"FigureS7_SpneumoRTT.tif"), 
        width=12, height=10, plot=SP_plots_full)
 
 ###################################
@@ -350,9 +350,9 @@ SET_plots_full <- ggarrange(
         labels=c(paste("(C)", wf_names["svi"]), "", paste("(D)", wf_names["sgi"]))),
     nrow=3, ncol=1, heights = c(1,0.25,1)
 )
-ggsave(file.path(verticall_figs_dir,"FigureS7_SentericaRTT.png"),
+ggsave(file.path(verticall_figs_dir,"FigureS8_SentericaRTT.png"),
        width=12, height=7, plot=SET_plots_full)
-ggsave(file.path(verticall_figs_dir,"FigureS7_SentericaRTT.tif"),
+ggsave(file.path(verticall_figs_dir,"FigureS8_SentericaRTT.tif"),
        width=12, height=7, plot=SET_plots_full)
 
 
